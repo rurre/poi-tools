@@ -13,7 +13,23 @@ namespace Poi
 {
     public class BakeToVertexColorsEditor : EditorWindow
     {
-        const string LOG_PREFIX = "Poi: ";
+        //Strings
+        const string LOG_PREFIX = "<color=pink>Poi</b>: "; //color is hex or name
+
+        const string hint_bakeAverageNormals = "Use this if you want seamless outlines";
+        const string hint_bakeVertexPositions = "Use this if you want scrolling emission";
+
+        const string button_bakeAverageNormals = "Bake Averaged Normals";
+        const string button_bakeVertexPositions = "Bake Vertex Positions";
+
+        const string checkBox_createAvatarBackup = "Create avatar backup before baking";
+
+        const string log_finishedBakingVertexPositions = "Finished baking vertex positions to vertex colors";
+        const string log_finishedBakingAveragedNormals = "Finished baking averaged normals to vertex colors";
+
+        const string warning_meshAlreadyHasVertexColors = "Your mesh already has vertex colors assigned.\nBaking new ones will overwrite them.\n\nNote: You can only have one set of vertex colors at a time";
+
+        //Properties
         static GameObject Selection
         {
             get => _selection;
@@ -26,11 +42,8 @@ namespace Poi
                 RefreshHasVertexColors();
             }
         }
-
         static bool SelectionHasVertexColors { get; set; }
-
         static bool ShouldCreateBackup { get; set; }
-
 
 
         [MenuItem("Poi/Tools/Bake Vertex Colors")]
@@ -57,8 +70,8 @@ namespace Poi
 
             EditorGUI.BeginDisabledGroup(!Selection);
             {
-                EditorGUILayout.HelpBox("Use this if you want seamless outlines", MessageType.Info);
-                if(GUILayout.Button("Bake Averaged Normals"))
+                EditorGUILayout.HelpBox(hint_bakeAverageNormals, MessageType.Info);
+                if(GUILayout.Button(button_bakeAverageNormals))
                 {
                     var meshes = GetAllMeshInfos(Selection);
                     if(ShouldCreateBackup)
@@ -68,8 +81,8 @@ namespace Poi
                 }
 
                 DrawLine(true, false);
-                EditorGUILayout.HelpBox("Use this if you want scrolling emission", MessageType.Info);
-                if(GUILayout.Button("Bake Vertex Positions"))
+                EditorGUILayout.HelpBox(hint_bakeVertexPositions, MessageType.Info);
+                if(GUILayout.Button(button_bakeVertexPositions))
                 {
                     var meshes = GetAllMeshInfos(Selection);
                     if(ShouldCreateBackup)
@@ -85,9 +98,9 @@ namespace Poi
             if(!Selection || !SelectionHasVertexColors)
                 return;
 
-            EditorGUILayout.HelpBox("Your mesh already has vertex colors assigned.\nBaking new ones will overwrite them.\n\nNote: You can only have one set of vertex colors at a time", MessageType.Warning);
+            EditorGUILayout.HelpBox(warning_meshAlreadyHasVertexColors, MessageType.Warning);
             DrawLine(false, false);
-            ShouldCreateBackup = EditorGUILayout.ToggleLeft("Create avatar backup before baking", ShouldCreateBackup);
+            ShouldCreateBackup = EditorGUILayout.ToggleLeft(checkBox_createAvatarBackup, ShouldCreateBackup);
             DrawLine(false, false);
         }
 
@@ -161,7 +174,7 @@ namespace Poi
                     colors[i] = new Color(verts[i].x, verts[i].y, verts[i].z);
                 info.sharedMesh.colors = colors;
             }
-            Debug.Log(LOG_PREFIX + "Finished baking vertex positions to vertex colors");
+            Debug.Log(LOG_PREFIX + log_finishedBakingVertexPositions);
         }
 
         static void BakeAveragedNormalsToColors(params MeshInfo[] infos)
@@ -214,7 +227,15 @@ namespace Poi
                 }
                 meshInfo.sharedMesh.colors = colors;
             }
-            Debug.Log(LOG_PREFIX + "Finished baking averaged normals to vertex colors");
+            Debug.Log(LOG_PREFIX + log_finishedBakingAveragedNormals);
+        }
+
+        static void RefreshHasVertexColors()
+        {
+            var meshes = GetAllMeshInfos(Selection).Select(i => i.sharedMesh);
+            SelectionHasVertexColors = meshes
+                .SelectMany(r => r.colors)
+                .Any(c => c != Color.white);
         }
 
         static void DrawLine(bool spaceBefore = true, bool spaceAfter = true)
@@ -229,14 +250,6 @@ namespace Poi
 
             if(spaceAfter)
                 GUILayout.Space(spaceHeight);
-        }
-
-        static void RefreshHasVertexColors()
-        {
-            var meshes = GetAllMeshInfos(Selection).Select(i => i.sharedMesh);
-            SelectionHasVertexColors = meshes
-                .SelectMany(r => r.colors)
-                .Any(c => c != Color.white);
         }
 
         struct MeshInfo
