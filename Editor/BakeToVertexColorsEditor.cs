@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -14,20 +15,18 @@ namespace Poi
     public class BakeToVertexColorsEditor : EditorWindow
     {
         //Strings
-        const string LOG_PREFIX = "<color=pink>Poi</b>: "; //color is hex or name
+        const string log_prefix = "<color=blue>Poi:</color> "; //color is hex or name
+
+        const string bakedSuffix_normals = "baked_normals";
+        const string bakedSuffix_position = "baked_position";
+
+        const string bakesFolderName = "Baked";
 
         const string hint_bakeAverageNormals = "Use this if you want seamless outlines";
         const string hint_bakeVertexPositions = "Use this if you want scrolling emission";
 
         const string button_bakeAverageNormals = "Bake Averaged Normals";
         const string button_bakeVertexPositions = "Bake Vertex Positions";
-
-        const string checkBox_createAvatarBackup = "Create avatar backup before baking";
-
-        const string log_finishedBakingVertexPositions = "Finished baking vertex positions to vertex colors";
-        const string log_finishedBakingAveragedNormals = "Finished baking averaged normals to vertex colors";
-
-        const string warning_meshAlreadyHasVertexColors = "Your mesh already has vertex colors assigned.\nBaking new ones will overwrite them.\n\nNote: You can only have one set of vertex colors at a time";
 
         //Properties
         static GameObject Selection
@@ -38,13 +37,8 @@ namespace Poi
                 if(_selection == value)
                     return;
                 _selection = value;
-
-                RefreshHasVertexColors();
             }
         }
-        static bool SelectionHasVertexColors { get; set; }
-        static bool ShouldCreateBackup { get; set; }
-
 
         [MenuItem("Poi/Tools/Bake Vertex Colors")]
         public static void ShowWindow()
@@ -66,7 +60,7 @@ namespace Poi
             if(EditorGUI.EndChangeCheck())
                 Selection = obj;
 
-            DrawLine();
+            PoiHelpers.DrawLine();
 
             EditorGUI.BeginDisabledGroup(!Selection);
             {
@@ -74,50 +68,79 @@ namespace Poi
                 if(GUILayout.Button(button_bakeAverageNormals))
                 {
                     var meshes = GetAllMeshInfos(Selection);
-                    if(ShouldCreateBackup)
-                        BackupAvatar(Selection);
                     BakeAveragedNormalsToColors(meshes);
-                    RefreshHasVertexColors();
                 }
 
-                DrawLine(true, false);
+                PoiHelpers.DrawLine(true, false);
                 EditorGUILayout.HelpBox(hint_bakeVertexPositions, MessageType.Info);
                 if(GUILayout.Button(button_bakeVertexPositions))
                 {
                     var meshes = GetAllMeshInfos(Selection);
-                    if(ShouldCreateBackup)
-                        BackupAvatar(Selection);
                     BakePositionsToColors(meshes);
-                    RefreshHasVertexColors();
                 }
             }
             EditorGUI.EndDisabledGroup();
-
-            DrawLine(true, false);
-
-            if(!Selection || !SelectionHasVertexColors)
-                return;
-
-            EditorGUILayout.HelpBox(warning_meshAlreadyHasVertexColors, MessageType.Warning);
-            DrawLine(false, false);
-            ShouldCreateBackup = EditorGUILayout.ToggleLeft(checkBox_createAvatarBackup, ShouldCreateBackup);
-            DrawLine(false, false);
         }
 
-        static void BackupAvatar(GameObject selection)
+        /// <summary>
+        /// Saves a mesh in the same folder as the original asset
+        /// </summary>
+        /// <param name="mesh"></param>
+        /// <param name="nameSuffix">Suffix to add to the end of the asset name</param>
+        /// <returns>Returns the newly created mesh asset</returns>
+        static Mesh SaveMeshAsset(Mesh mesh, string nameSuffix = "baked")
         {
-            if(!SelectionHasVertexColors)
-                return;
-            string assetPath = AssetDatabase.GetAssetPath(selection);
+            string assetPath = AssetDatabase.GetAssetPath(mesh);
             if(string.IsNullOrWhiteSpace(assetPath))
-                return;
+                return null;
 
-            string ext = Path.GetExtension(assetPath);
-            string pathNoExt = Path.Combine(Path.GetDirectoryName(assetPath), Path.GetFileNameWithoutExtension(assetPath));
-            string newPath = AssetDatabase.GenerateUniqueAssetPath($"{pathNoExt}_backup{ext}");
+            //Figure out folder name
+            string bakesDir = $"{Path.GetDirectoryName(assetPath)}";
+            if(!bakesDir.EndsWith(bakesFolderName))
+                bakesDir += $"/{bakesFolderName}";
+            PoiHelpers.EnsurePathExistsInAssets(bakesDir);
 
-            AssetDatabase.CopyAsset(assetPath, newPath);
-            Debug.Log(LOG_PREFIX + "Backed up avatar at " + newPath);
+            //Figure out mesh name
+            string fileName = PoiHelpers.RemoveSuffix(Path.GetFileNameWithoutExtension(assetPath), "baked", bakedSuffix_normals, bakedSuffix_position);
+            fileName = PoiHelpers.AddSuffix(fileName, nameSuffix);
+
+            string pathNoExt = Path.Combine(bakesDir, fileName);
+            string newPath = AssetDatabase.GenerateUniqueAssetPath(pathNoExt) + ".mesh";
+
+            //Save mesh, load it back then assign to renderer
+            Mesh newMesh = Instantiate(mesh);
+            AssetDatabase.CreateAsset(newMesh, newPath);
+
+            newMesh = AssetDatabase.LoadAssetAtPath<Mesh>(newPath);
+
+            if(newMesh == null)
+            {
+                Debug.Log(log_prefix + "Failed to load saved mesh");
+                return null;
+            }
+
+            EditorGUIUtility.PingObject(newMesh);
+            return newMesh;
+        }
+
+        /// <summary>
+        /// Sets the sharedMesh of a Skinned Mesh Renderer or Mesh Filter attached to a Mesh Renderer
+        /// </summary>
+        /// <param name="render"></param>
+        /// <param name="mesh"></param>
+        /// <returns></returns>
+        static bool SetRendererSharedMesh(Renderer render, Mesh mesh)
+        {
+            if(render is SkinnedMeshRenderer smr)
+                smr.sharedMesh = mesh;
+            else if(render is MeshRenderer mr)
+            {
+                var filter = mr.gameObject.GetComponent<MeshFilter>();
+                filter.sharedMesh = mesh;
+            }
+            else
+                return false;
+            return true;
         }
 
         static MeshInfo[] GetAllMeshInfos(GameObject obj)
@@ -148,12 +171,18 @@ namespace Poi
                     info.sharedMesh = smr.sharedMesh;
                     info.bakedVertices = bakedMesh?.vertices;
                     info.bakedNormals = bakedMesh?.normals;
+                    info.ownerRenderer = smr;
+                    if(!info.sharedMesh)
+                        Debug.LogWarning(log_prefix + $"Skinned Mesh Renderer at <b>{info.ownerRenderer.gameObject.name}</b> doesn't have a valid mesh");
                 }
                 else if(ren is MeshRenderer mr)
                 {
                     info.sharedMesh = mr.GetComponent<MeshFilter>()?.sharedMesh;
                     info.bakedVertices = info.sharedMesh?.vertices;
                     info.bakedNormals = info.sharedMesh?.normals;
+                    info.ownerRenderer = mr;
+                    if(!info.sharedMesh)
+                        Debug.LogWarning(log_prefix + $"Mesh renderer at <b>{info.ownerRenderer.gameObject.name}</b> doesn't have a mesh filter with a valid mesh");
                 }
                 return info;
             }).ToArray();
@@ -161,99 +190,111 @@ namespace Poi
             return infos;
         }
 
-        static void BakePositionsToColors(MeshInfo[] infos)
+        static void BakePositionsToColors(MeshInfo[] meshInfos)
         {
-            foreach(var info in infos)
+            try
             {
-                if(info.sharedMesh == null)
-                    continue;
+                AssetDatabase.StartAssetEditing();
+                foreach(var meshInfo in meshInfos)
+                {
+                    if(!meshInfo.sharedMesh)
+                        continue;
 
-                Vector3[] verts = info.bakedVertices;    //accessing mesh.vertices on every iteration is very slow
-                Color[] colors = new Color[verts.Length];
-                for(int i = 0; i < verts.Length; i++)
-                    colors[i] = new Color(verts[i].x, verts[i].y, verts[i].z);
-                info.sharedMesh.colors = colors;
+                    Vector3[] verts = meshInfo.bakedVertices;    //accessing mesh.vertices on every iteration is very slow
+                    Color[] colors = new Color[verts.Length];
+                    for(int i = 0; i < verts.Length; i++)
+                        colors[i] = new Color(verts[i].x, verts[i].y, verts[i].z);
+                    meshInfo.sharedMesh.colors = colors;
+
+                    Mesh newMesh = null;
+                    if(newMesh = SaveMeshAsset(meshInfo.sharedMesh, bakedSuffix_position))
+                        SetRendererSharedMesh(meshInfo.ownerRenderer, newMesh);
+                }
             }
-            Debug.Log(LOG_PREFIX + log_finishedBakingVertexPositions);
+            catch(Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
+            }
         }
 
         static void BakeAveragedNormalsToColors(params MeshInfo[] infos)
         {
-            foreach(var meshInfo in infos)
+            try
             {
-                Vector3[] verts = meshInfo.bakedVertices;
-                Vector3[] normals = meshInfo.bakedNormals;
-                VertexInfo[] vertInfo = new VertexInfo[verts.Length];
-                for(int i = 0; i < verts.Length; i++)
+                AssetDatabase.StartAssetEditing();
+                foreach(var meshInfo in infos)
                 {
-                    vertInfo[i] = new VertexInfo()
-                    {
-                        vertex = verts[i],
-                        originalIndex = i,
-                        normal = normals[i]
-                    };
-                }
-                var groups = vertInfo.GroupBy(x => x.vertex);
-                VertexInfo[] processedVertInfo = new VertexInfo[vertInfo.Length];
-                int index = 0;
-                foreach(IGrouping<Vector3, VertexInfo> group in groups)
-                {
-                    Vector3 avgNormal = Vector3.zero;
-                    foreach(VertexInfo item in group)
-                        avgNormal += item.normal;
+                    if(!meshInfo.sharedMesh)
+                        continue;
 
-                    avgNormal /= group.Count();
-                    foreach(VertexInfo item in group)
+                    Vector3[] verts = meshInfo.bakedVertices;
+                    Vector3[] normals = meshInfo.bakedNormals;
+                    VertexInfo[] vertInfo = new VertexInfo[verts.Length];
+                    for(int i = 0; i < verts.Length; i++)
                     {
-                        processedVertInfo[index] = new VertexInfo()
+                        vertInfo[i] = new VertexInfo()
                         {
-                            vertex = item.vertex,
-                            originalIndex = item.originalIndex,
-                            normal = item.normal,
-                            averagedNormal = avgNormal
+                            vertex = verts[i],
+                            originalIndex = i,
+                            normal = normals[i]
                         };
-                        index++;
                     }
-                }
-                Color[] colors = new Color[verts.Length];
-                for(int i = 0; i < processedVertInfo.Length; i++)
-                {
-                    VertexInfo info = processedVertInfo[i];
+                    var groups = vertInfo.GroupBy(x => x.vertex);
+                    VertexInfo[] processedVertInfo = new VertexInfo[vertInfo.Length];
+                    int index = 0;
+                    foreach(IGrouping<Vector3, VertexInfo> group in groups)
+                    {
+                        Vector3 avgNormal = Vector3.zero;
+                        foreach(VertexInfo item in group)
+                            avgNormal += item.normal;
 
-                    int origIndex = info.originalIndex;
-                    Vector3 normal = info.averagedNormal;
-                    Color normColor = new Color(normal.x, normal.y, normal.z, 1);
-                    colors[origIndex] = normColor;
+                        avgNormal /= group.Count();
+                        foreach(VertexInfo item in group)
+                        {
+                            processedVertInfo[index] = new VertexInfo()
+                            {
+                                vertex = item.vertex,
+                                originalIndex = item.originalIndex,
+                                normal = item.normal,
+                                averagedNormal = avgNormal
+                            };
+                            index++;
+                        }
+                    }
+                    Color[] colors = new Color[verts.Length];
+                    for(int i = 0; i < processedVertInfo.Length; i++)
+                    {
+                        VertexInfo info = processedVertInfo[i];
+
+                        int origIndex = info.originalIndex;
+                        Vector3 normal = info.averagedNormal;
+                        Color normColor = new Color(normal.x, normal.y, normal.z, 1);
+                        colors[origIndex] = normColor;
+                    }
+                    meshInfo.sharedMesh.colors = colors;
+
+                    Mesh newMesh = null;
+                    if(newMesh = SaveMeshAsset(meshInfo.sharedMesh, bakedSuffix_normals))
+                        SetRendererSharedMesh(meshInfo.ownerRenderer, newMesh);
                 }
-                meshInfo.sharedMesh.colors = colors;
             }
-            Debug.Log(LOG_PREFIX + log_finishedBakingAveragedNormals);
-        }
-
-        static void RefreshHasVertexColors()
-        {
-            var meshes = GetAllMeshInfos(Selection).Select(i => i.sharedMesh);
-            SelectionHasVertexColors = meshes
-                .SelectMany(r => r.colors)
-                .Any(c => c != Color.white);
-        }
-
-        static void DrawLine(bool spaceBefore = true, bool spaceAfter = true)
-        {
-            float spaceHeight = 3f;
-            if(spaceBefore)
-                GUILayout.Space(spaceHeight);
-
-            Rect rect = EditorGUILayout.GetControlRect(false, 1);
-            rect.height = 1;
-            EditorGUI.DrawRect(rect, new Color(0.5f, 0.5f, 0.5f, 1));
-
-            if(spaceAfter)
-                GUILayout.Space(spaceHeight);
+            catch(Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
+            }
         }
 
         struct MeshInfo
         {
+            public Renderer ownerRenderer;
             public Mesh sharedMesh;
             public Vector3[] bakedVertices;
             public Vector3[] bakedNormals;
@@ -268,6 +309,6 @@ namespace Poi
         }
 
         static GameObject _selection;
-        static bool _selectionHasVertexColors;
     }
 }
+#endif
