@@ -103,6 +103,94 @@ namespace Poi
             if(spaceAfter)
                 GUILayout.Space(spaceHeight);
         }
+
+        /// <summary>
+        /// Destroys an object with DestroyImmediate in object mode and Destroy in play mode
+        /// </summary>
+        /// <param name="obj"></param>
+        internal static void DestroyAppropriate(UnityEngine.Object obj)
+        {
+            if(EditorApplication.isPlaying)
+                UnityEngine.Object.Destroy(obj);
+            else
+                UnityEngine.Object.DestroyImmediate(obj);
+        }
+
+        /// <summary>
+        /// Changes path from full windows path to a local path in the Assets folder
+        /// </summary>
+        /// <param name="path"></param>
+        /// <returns>Path starting with Assets</returns>
+        internal static string AbsolutePathToLocalAssetsPath(string path)
+        {
+            if(path.StartsWith(Application.dataPath))
+                path = "Assets" + path.Substring(Application.dataPath.Length);
+            return path;
+        }
+
+        #region Extensions
+
+        /// <summary>
+        /// Extension method that bakes a material to <paramref name="tex"/>
+        /// </summary>
+        /// <param name="tex">Texture to bake <paramref name="materialToBake"/> to</param>
+        /// <param name="materialToBake">Material to bake to <paramref name="tex"/></param>
+        internal static void BakeMaterialToTexture(this Texture2D tex, Material materialToBake)
+        {
+            var res = new Vector2Int(tex.width, tex.height);
+
+            RenderTexture renderTexture = RenderTexture.GetTemporary(res.x, res.y);
+            Graphics.Blit(null, renderTexture, materialToBake);
+
+            //transfer image from rendertexture to texture
+            RenderTexture.active = renderTexture;
+            tex.ReadPixels(new Rect(Vector2.zero, res), 0, 0);
+
+            //clean up variables
+            RenderTexture.active = null;
+            RenderTexture.ReleaseTemporary(renderTexture);
+        }
+
+        internal static void SaveTextureAsset(this Texture2D tex, string assetPath, bool overwrite)
+        {
+            var bytes = tex.EncodeToPNG();
+
+
+            // Ensure directory exists then convert path to local asset path
+            if(!assetPath.StartsWith("Assets", StringComparison.OrdinalIgnoreCase))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(assetPath));
+                assetPath = AbsolutePathToLocalAssetsPath(assetPath);
+            }
+            else
+            {
+                string absolutePath = LocalAssetsPathToAbsolutePath(assetPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
+            }
+
+            if(AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath) && !overwrite)
+                assetPath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
+
+            File.WriteAllBytes(assetPath, bytes);
+            AssetDatabase.Refresh();
+        }
+
+        internal static Texture2D GetReadableTextureCopy(this Texture2D tex)
+        {
+            byte[] pix = tex.GetRawTextureData();
+            Texture2D finalTex = new Texture2D(tex.width, tex.height, tex.format, false);
+            finalTex.LoadRawTextureData(pix);
+            finalTex.Apply();
+            return finalTex;
+        }
+
+        internal static void PingAssetAtPath(string path)
+        {
+            var inst = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path).GetInstanceID();
+            EditorGUIUtility.PingObject(inst);
+        }
+
+        #endregion
     }
 }
 #endif

@@ -32,12 +32,7 @@ namespace Poi
         static GameObject Selection
         {
             get => _selection;
-            set
-            {
-                if(_selection == value)
-                    return;
-                _selection = value;
-            }
+            set => _selection = value;
         }
 
         [MenuItem("Poi/Tools/Bake Vertex Colors")]
@@ -107,9 +102,10 @@ namespace Poi
             string pathNoExt = Path.Combine(bakesDir, fileName);
             string newPath = AssetDatabase.GenerateUniqueAssetPath(pathNoExt) + ".mesh";
 
-            //Save mesh, load it back then assign to renderer
+            //Save mesh, load it back, assign to renderer then clean up
             Mesh newMesh = Instantiate(mesh);
             AssetDatabase.CreateAsset(newMesh, newPath);
+            PoiHelpers.DestroyAppropriate(newMesh);
 
             newMesh = AssetDatabase.LoadAssetAtPath<Mesh>(newPath);
 
