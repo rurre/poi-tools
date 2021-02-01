@@ -146,11 +146,6 @@ namespace Poi
             RenderTexture.active = renderTexture;
             tex.ReadPixels(new Rect(Vector2.zero, res), 0, 0);
 
-            //save texture to file
-            byte[] png = tex.EncodeToPNG();
-            File.WriteAllBytes("D:/tex2.png", png);
-            AssetDatabase.Refresh();
-
             //clean up variables
             RenderTexture.active = null;
             RenderTexture.ReleaseTemporary(renderTexture);
@@ -160,8 +155,19 @@ namespace Poi
         {
             var bytes = tex.EncodeToPNG();
 
+
+            // Ensure directory exists then convert path to local asset path
             if(!assetPath.StartsWith("Assets", StringComparison.OrdinalIgnoreCase))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(assetPath));
                 assetPath = AbsolutePathToLocalAssetsPath(assetPath);
+            }
+            else
+            {
+                string absolutePath = LocalAssetsPathToAbsolutePath(assetPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
+            }
+
             if(AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath) && !overwrite)
                 assetPath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
 
@@ -176,6 +182,12 @@ namespace Poi
             finalTex.LoadRawTextureData(pix);
             finalTex.Apply();
             return finalTex;
+        }
+
+        internal static void PingAssetAtPath(string path)
+        {
+            var inst = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path).GetInstanceID();
+            EditorGUIUtility.PingObject(inst);
         }
 
         #endregion

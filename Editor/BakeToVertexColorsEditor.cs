@@ -32,12 +32,7 @@ namespace Poi
         static GameObject Selection
         {
             get => _selection;
-            set
-            {
-                if(_selection == value)
-                    return;
-                _selection = value;
-            }
+            set => _selection = value;
         }
 
         [MenuItem("Poi/Tools/Bake Vertex Colors")]
