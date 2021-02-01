@@ -251,10 +251,10 @@ namespace Poi
         {
             var channels = new Dictionary<string, Texture2D>()
             {
-                {"red", new Texture2D(UnpackedSize, UnpackedSize)},
-                {"green", new Texture2D(UnpackedSize, UnpackedSize)},
-                {"blue", new Texture2D(UnpackedSize, UnpackedSize)},
-                {"alpha", new Texture2D(UnpackedSize, UnpackedSize)}
+                {"red", new Texture2D(UnpackedSize, UnpackedSize, TextureFormat.RGB24, true)},
+                {"green", new Texture2D(UnpackedSize, UnpackedSize, TextureFormat.RGB24, true)},
+                {"blue", new Texture2D(UnpackedSize, UnpackedSize, TextureFormat.RGB24, true)},
+                {"alpha", new Texture2D(UnpackedSize, UnpackedSize, TextureFormat.RGB24, true)}
             };
 
             var mat = new Material(UnpackerShader);
