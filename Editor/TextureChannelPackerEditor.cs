@@ -1,6 +1,7 @@
 ﻿#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -11,8 +12,27 @@ namespace Poi
     {
         // Packing
         Texture2D packRed, packGreen, packBlue, packAlpha;
-        readonly int[] sizes = { 128, 256, 512, 1024, 2048, 4096 };
-        int Size = 1024;
+        List<int> Sizes { get; } = new List<int> {128, 256, 512, 1024, 2048, 4096};
+        string[] SizeNames
+        {
+            get
+            {
+                if(_sizeNames == null)
+                    _sizeNames = Sizes.Select(s => s.ToString()).ToArray();
+                return _sizeNames;
+            }
+        }
+
+        int packedSizeSelectionIndex = 0;
+        int unpackedSizeSelectionIndex = 0;
+
+        bool packAutoSelectSize = true;
+        bool unpackAutoSelectSize = true;
+
+
+        int PackedSize => Sizes[packedSizeSelectionIndex];
+        int UnpackedSize => Sizes[unpackedSizeSelectionIndex];
+
         Shader PackerShader
         {
             get
@@ -79,26 +99,57 @@ namespace Poi
                 DrawUnpackUI();
         }
 
-        Texture2D preview;
-
         private void DrawPackUI()
         {
-            packRed = EditorGUILayout.ObjectField("Red", packRed, typeof(Texture2D), true) as Texture2D;
-            packGreen = EditorGUILayout.ObjectField("Green", packGreen, typeof(Texture2D), true) as Texture2D;
-            packBlue = EditorGUILayout.ObjectField("Blue", packBlue, typeof(Texture2D), true) as Texture2D;
-            packAlpha = EditorGUILayout.ObjectField("Alpha", packAlpha, typeof(Texture2D), true) as Texture2D;
-
-            PoiHelpers.DrawLine();
+            EditorGUI.BeginChangeCheck();
+            {
+                packRed = EditorGUILayout.ObjectField("Red", packRed, typeof(Texture2D), true) as Texture2D;
+                packGreen = EditorGUILayout.ObjectField("Green", packGreen, typeof(Texture2D), true) as Texture2D;
+                packBlue = EditorGUILayout.ObjectField("Blue", packBlue, typeof(Texture2D), true) as Texture2D;
+                packAlpha = EditorGUILayout.ObjectField("Alpha", packAlpha, typeof(Texture2D), true) as Texture2D;
+            }
 
             bool disabled = new bool[] { packRed, packGreen, packBlue, packAlpha }.Count(b => b) < 2;
+
+            if(EditorGUI.EndChangeCheck() && packAutoSelectSize && !disabled)
+            {
+                // Get biggest texture size from selections and make a selection in our sizes list
+                int max = new []
+                    {
+                        packRed ? packRed.height : 0,
+                        packRed ? packRed.width : 0,
+                        packGreen ? packGreen.height : 0,
+                        packGreen ? packGreen.width : 0,
+                        packBlue ? packBlue.height : 0,
+                        packBlue ? packBlue.width : 0,
+                        packAlpha ? packAlpha.height : 0,
+                        packAlpha ? packAlpha.width : 0
+                    }.Max();
+                int size = Sizes.FirstOrDefault(i => i <= 2048 ? i >= max : i < max);
+                int index = Sizes.IndexOf(size);
+                packedSizeSelectionIndex = index != -1 ? index : 0;
+            }
+
+            PoiHelpers.DrawLine();
 
             EditorGUI.BeginDisabledGroup(disabled);
             {
                 packedName = EditorGUILayout.TextField("File name", packedName);
 
+                EditorGUILayout.Space();
+
+                EditorGUI.BeginDisabledGroup(packAutoSelectSize);
+                packedSizeSelectionIndex = EditorGUILayout.Popup("Size", packedSizeSelectionIndex, SizeNames);
+                EditorGUI.EndDisabledGroup();
+
+                packAutoSelectSize = EditorGUILayout.Toggle("Auto select Size", packAutoSelectSize);
+
+                EditorGUILayout.Space();
+                PoiHelpers.DrawLine();
+
                 if(GUILayout.Button("Pack"))
                 {
-                    var packResult = PackTexture(Size, packRed, packGreen, packBlue, packAlpha);
+                    var packResult = PackTexture(PackedSize, packRed, packGreen, packBlue, packAlpha);
                     if(packResult)
                     {
                         string path = $"{savePath}/Packed/{packedName}.png";
@@ -112,13 +163,35 @@ namespace Poi
 
         private void DrawUnpackUI()
         {
-            unpackSource = EditorGUILayout.ObjectField("To Unpack", unpackSource, typeof(Texture2D), true) as Texture2D;
+            EditorGUI.BeginChangeCheck();
+            {
+                unpackSource =
+                    EditorGUILayout.ObjectField("To Unpack", unpackSource, typeof(Texture2D), true) as Texture2D;
+            }
+            if(EditorGUI.EndChangeCheck() && unpackAutoSelectSize && unpackSource)
+            {
+                // Get biggest texture size from selections and make a selection in our sizes list
+                int max = new[] {unpackSource.width, unpackSource.height}.Max();
+                int size = Sizes.FirstOrDefault(i => i <= 2048 ? i >= max : i < max);
+                int index = Sizes.IndexOf(size);
+                unpackedSizeSelectionIndex = index != -1 ? index : 0;
+            }
 
             PoiHelpers.DrawLine();
 
             EditorGUI.BeginDisabledGroup(!unpackSource);
             {
                 unpackedName = EditorGUILayout.TextField("File name", unpackedName);
+
+                EditorGUILayout.Space();
+
+                EditorGUI.BeginDisabledGroup(unpackAutoSelectSize);
+                unpackedSizeSelectionIndex = EditorGUILayout.Popup("Size", unpackedSizeSelectionIndex, SizeNames);
+                EditorGUI.EndDisabledGroup();
+
+                unpackAutoSelectSize = EditorGUILayout.Toggle("Auto select Size", unpackAutoSelectSize);
+
+                PoiHelpers.DrawLine();
 
                 if(GUILayout.Button("Unpack"))
                 {
@@ -178,10 +251,10 @@ namespace Poi
         {
             var channels = new Dictionary<string, Texture2D>()
             {
-                {"red", new Texture2D(Size, Size)},
-                {"green", new Texture2D(Size, Size)},
-                {"blue", new Texture2D(Size, Size)},
-                {"alpha", new Texture2D(Size, Size)}
+                {"red", new Texture2D(UnpackedSize, UnpackedSize)},
+                {"green", new Texture2D(UnpackedSize, UnpackedSize)},
+                {"blue", new Texture2D(UnpackedSize, UnpackedSize)},
+                {"alpha", new Texture2D(UnpackedSize, UnpackedSize)}
             };
 
             var mat = new Material(UnpackerShader);
@@ -198,6 +271,7 @@ namespace Poi
 
         string[] _tabNames;
         Shader _packerShader;
+        string[] _sizeNames;
     }
 }
 #endif
