@@ -1,5 +1,4 @@
-﻿#if UNITY_EDITOR
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -84,7 +83,6 @@ namespace Poi
             return str;
         }
 
-
         /// <summary>
         /// Draws a GUI ilne
         /// </summary>
@@ -128,8 +126,73 @@ namespace Poi
             return path;
         }
 
-        #region Extensions
+        /// <summary>
+        /// Selects and highlights the asset in your unity Project tab
+        /// </summary>
+        /// <param name="path"></param>
+        internal static void PingAssetAtPath(string path)
+        {
+            var inst = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path).GetInstanceID();
+            EditorGUIUtility.PingObject(inst);
+        }
 
+        internal static Vector2Int DrawResolutionPicker(Vector2Int size, ref bool linked, ref bool autoDetect, int[] presets = null, string[] presetNames = null)
+        {
+            EditorGUI.BeginDisabledGroup(autoDetect);
+            EditorGUILayout.BeginHorizontal();
+            {
+                EditorGUILayout.PrefixLabel("Size");
+
+                EditorGUI.BeginChangeCheck();
+                size.x = EditorGUILayout.IntField(size.x);
+                if(linked && EditorGUI.EndChangeCheck())
+                    size.y = size.x;
+
+                EditorGUILayout.LabelField("x", GUILayout.MaxWidth(12));
+
+                EditorGUI.BeginChangeCheck();
+                size.y = EditorGUILayout.IntField(size.y);
+                if(linked && EditorGUI.EndChangeCheck())
+                    size.x = size.y;
+
+                if(presets != null && presetNames != null)
+                {
+                    EditorGUI.BeginChangeCheck();
+                    int selectedPresetIndex = EditorGUILayout.Popup(GUIContent.none, -1, presetNames, GUILayout.MaxWidth(16));
+                    if(EditorGUI.EndChangeCheck() && selectedPresetIndex != -1)
+                        size = new Vector2Int(presets[selectedPresetIndex], presets[selectedPresetIndex]);
+                }
+
+                linked = GUILayout.Toggle(linked, "L", EditorStyles.miniButton, GUILayout.MaxWidth(16));
+            }
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUI.EndDisabledGroup();
+
+            autoDetect = EditorGUILayout.Toggle("Auto detect", autoDetect);
+
+            return size;
+        }
+
+        /// <summary>
+        /// Gets the combined maximum width and height of the passed in textures
+        /// </summary>
+        /// <param name="textures"></param>
+        /// <returns></returns>
+        internal static Vector2Int GetMaxSizeFromTextures(params Texture2D[] textures)
+        {
+            var sizes = textures.Where(tex => tex).Select(tex => new Vector2Int(tex.width, tex.height)).ToArray();
+            if(sizes.Length == 0)
+                return default;
+
+            int maxW = sizes.Max(wh => wh.x);
+            int maxH = sizes.Max(wh => wh.y);
+            return new Vector2Int(maxW, maxH);
+        }
+    }
+
+    internal static class PoiExtensions
+    {
         /// <summary>
         /// Extension method that bakes a material to <paramref name="tex"/>
         /// </summary>
@@ -160,11 +223,11 @@ namespace Poi
             if(!assetPath.StartsWith("Assets", StringComparison.OrdinalIgnoreCase))
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(assetPath));
-                assetPath = AbsolutePathToLocalAssetsPath(assetPath);
+                assetPath = PoiHelpers.AbsolutePathToLocalAssetsPath(assetPath);
             }
             else
             {
-                string absolutePath = LocalAssetsPathToAbsolutePath(assetPath);
+                string absolutePath = PoiHelpers.LocalAssetsPathToAbsolutePath(assetPath);
                 Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
             }
 
@@ -184,13 +247,28 @@ namespace Poi
             return finalTex;
         }
 
-        internal static void PingAssetAtPath(string path)
+        /// <summary>
+        /// Rounds vector to closest power of two. Optionally, if above ceiling, square root down by one power of two
+        /// </summary>
+        /// <param name="vec"></param>
+        /// <param name="ceiling">Power of two ceiling. Will be rounded to power of two if not power of two already</param>
+        /// <returns></returns>
+        internal static Vector2Int ClosestPowerOfTwo(this Vector2Int vec, int? ceiling = null)
         {
-            var inst = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path).GetInstanceID();
-            EditorGUIUtility.PingObject(inst);
-        }
+            int x = Mathf.ClosestPowerOfTwo(vec.x);
+            int y = Mathf.ClosestPowerOfTwo(vec.y);
 
-        #endregion
+            if(ceiling != null)
+            {
+                int ceil = Mathf.ClosestPowerOfTwo((int) ceiling);
+                int oneBelowCeil = (int)Math.Sqrt(ceil);
+
+                // If above ceiling, root down to a lower power of two
+                x = x > ceil ? oneBelowCeil : x;
+                y = y > ceil ? oneBelowCeil : y;
+            }
+
+            return new Vector2Int(x, y);
+        }
     }
 }
-#endif

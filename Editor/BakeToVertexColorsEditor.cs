@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -14,6 +13,9 @@ namespace Poi
 {
     public class BakeToVertexColorsEditor : EditorWindow
     {
+        //Window
+        static readonly Vector2 MIN_WINDOW_SIZE = new Vector2(316, 200);
+
         //Strings
         const string log_prefix = "<color=blue>Poi:</color> "; //color is hex or name
 
@@ -28,6 +30,9 @@ namespace Poi
         const string button_bakeAverageNormals = "Bake Averaged Normals";
         const string button_bakeVertexPositions = "Bake Vertex Positions";
 
+        const string warning_noMeshesDetected =
+            "No meshes detected in selection. Make sure your object has a Skinned Mesh Renderer or a Mesh Renderer with a valid Mesh assigned";
+
         //Properties
         static GameObject Selection
         {
@@ -41,6 +46,7 @@ namespace Poi
             //Show existing window instance. If one doesn't exist, make one.
             EditorWindow editorWindow = GetWindow(typeof(BakeToVertexColorsEditor));
             editorWindow.autoRepaintOnSceneChange = true;
+            editorWindow.minSize = MIN_WINDOW_SIZE;
 
             editorWindow.Show();
             editorWindow.titleContent = new GUIContent("Bake Colors");
@@ -63,7 +69,10 @@ namespace Poi
                 if(GUILayout.Button(button_bakeAverageNormals))
                 {
                     var meshes = GetAllMeshInfos(Selection);
-                    BakeAveragedNormalsToColors(meshes);
+                    if(meshes == null || meshes.Length == 0)
+                        Debug.LogWarning(log_prefix + warning_noMeshesDetected);
+                    else
+                        BakeAveragedNormalsToColors(meshes);
                 }
 
                 PoiHelpers.DrawLine(true, false);
@@ -71,7 +80,10 @@ namespace Poi
                 if(GUILayout.Button(button_bakeVertexPositions))
                 {
                     var meshes = GetAllMeshInfos(Selection);
-                    BakePositionsToColors(meshes);
+                    if(meshes == null || meshes.Length == 0)
+                        Debug.LogWarning(log_prefix + warning_noMeshesDetected);
+                    else
+                        BakePositionsToColors(meshes);
                 }
             }
             EditorGUI.EndDisabledGroup();
@@ -307,4 +319,3 @@ namespace Poi
         static GameObject _selection;
     }
 }
-#endif

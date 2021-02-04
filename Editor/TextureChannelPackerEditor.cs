@@ -1,5 +1,4 @@
-﻿#if UNITY_EDITOR
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -10,28 +9,33 @@ namespace Poi
 {
     public class TextureChannelPackerEditor : EditorWindow
     {
-        // Packing
-        Texture2D packRed, packGreen, packBlue, packAlpha;
-        List<int> Sizes { get; } = new List<int> {128, 256, 512, 1024, 2048, 4096};
-        string[] SizeNames
+        const string log_prefix = "<color=blue>Poi:</color> "; //color is hex or name
+
+        static readonly Vector2 MIN_WINDOW_SIZE = new Vector2(316, 420);
+
+        const int AUTO_SELECT_CEILING = 2048;
+        int[] SizePresets { get; } = { 128, 256, 512, 1024, 2048, 4096 };
+        string[] SizePresetNames
         {
             get
             {
                 if(_sizeNames == null)
-                    _sizeNames = Sizes.Select(s => s.ToString()).ToArray();
+                    _sizeNames = SizePresets.Select(i => i + " x " + i).ToArray();
                 return _sizeNames;
             }
         }
 
-        int packedSizeSelectionIndex = 0;
-        int unpackedSizeSelectionIndex = 0;
+        Vector2Int PackSize { get; set; } = new Vector2Int(1024, 1024);
+        Vector2Int UnpackSize { get; set; } = new Vector2Int(1024, 1024);
 
-        bool packAutoSelectSize = true;
-        bool unpackAutoSelectSize = true;
+        bool packSizeIsLinked = true;
+        bool unpackSizeIsLinked = true;
 
+        bool packSizeAutoSelect = true;
+        bool unpackSizeAutoSelect = true;
 
-        int PackedSize => Sizes[packedSizeSelectionIndex];
-        int UnpackedSize => Sizes[unpackedSizeSelectionIndex];
+        Texture2D packRed, packGreen, packBlue, packAlpha;
+        Texture2D unpackSource;
 
         Shader PackerShader
         {
@@ -44,9 +48,6 @@ namespace Poi
             }
         }
 
-
-        // Unpacking
-        Texture2D unpackSource;
         Shader UnpackerShader
         {
             get
@@ -58,7 +59,7 @@ namespace Poi
             }
         }
 
-        // Tabs
+        // UI
         enum Tab { Pack, Unpack }
         int selectedTab = 0;
         string[] TabNames
@@ -76,18 +77,20 @@ namespace Poi
         string unpackedName = "unpacked";
 
 
+
         [MenuItem("Poi/Tools/Texture Packer")]
         public static void ShowWindow()
         {
             //Show existing window instance. If one doesn't exist, make one.
             EditorWindow editorWindow = GetWindow(typeof(TextureChannelPackerEditor));
             editorWindow.autoRepaintOnSceneChange = true;
+            editorWindow.minSize = MIN_WINDOW_SIZE;
 
             editorWindow.Show();
             editorWindow.titleContent = new GUIContent("Texture Packer");
         }
 
-        private void OnGUI()
+        void OnGUI()
         {
             PoiHelpers.DrawLine();
             selectedTab = GUILayout.Toolbar(selectedTab, TabNames);
@@ -99,7 +102,7 @@ namespace Poi
                 DrawUnpackUI();
         }
 
-        private void DrawPackUI()
+        void DrawPackUI()
         {
             EditorGUI.BeginChangeCheck();
             {
@@ -108,52 +111,36 @@ namespace Poi
                 packBlue = EditorGUILayout.ObjectField("Blue", packBlue, typeof(Texture2D), true) as Texture2D;
                 packAlpha = EditorGUILayout.ObjectField("Alpha", packAlpha, typeof(Texture2D), true) as Texture2D;
             }
-
-            bool disabled = new bool[] { packRed, packGreen, packBlue, packAlpha }.Count(b => b) < 2;
-
-            if(EditorGUI.EndChangeCheck() && packAutoSelectSize && !disabled)
+            if(EditorGUI.EndChangeCheck() && packSizeAutoSelect)
             {
-                int max = new []
-                    {
-                        packRed ? packRed.height : 0,
-                        packRed ? packRed.width : 0,
-                        packGreen ? packGreen.height : 0,
-                        packGreen ? packGreen.width : 0,
-                        packBlue ? packBlue.height : 0,
-                        packBlue ? packBlue.width : 0,
-                        packAlpha ? packAlpha.height : 0,
-                        packAlpha ? packAlpha.width : 0
-                    }.Max();
-
                 // Get biggest texture size from selections and make a selection in our sizes list
-                var size = Sizes.FirstOrDefault(i => i >= max);
-                packedSizeSelectionIndex = Sizes.IndexOf(size);
+                var tempSize = PoiHelpers.GetMaxSizeFromTextures(packRed, packGreen, packBlue, packAlpha);
+                if(tempSize != default)
+                    PackSize = tempSize.ClosestPowerOfTwo(AUTO_SELECT_CEILING);
             }
 
             PoiHelpers.DrawLine();
 
+            bool disabled = new bool[] { packRed, packGreen, packBlue, packAlpha }.Count(b => b) < 2;
             EditorGUI.BeginDisabledGroup(disabled);
             {
                 packedName = EditorGUILayout.TextField("File name", packedName);
 
                 EditorGUILayout.Space();
 
-                EditorGUI.BeginDisabledGroup(packAutoSelectSize);
-                packedSizeSelectionIndex = EditorGUILayout.Popup("Size", packedSizeSelectionIndex, SizeNames);
-                EditorGUI.EndDisabledGroup();
-
-                packAutoSelectSize = EditorGUILayout.Toggle("Auto select Size", packAutoSelectSize);
+                PackSize = PoiHelpers.DrawResolutionPicker(PackSize, ref packSizeIsLinked, ref packSizeAutoSelect, SizePresets, SizePresetNames);
 
                 EditorGUILayout.Space();
                 PoiHelpers.DrawLine();
 
                 if(GUILayout.Button("Pack"))
                 {
-                    var packResult = PackTexture(PackedSize, packRed, packGreen, packBlue, packAlpha);
+                    var packResult = PackTexture(PackSize, packRed, packGreen, packBlue, packAlpha);
                     if(packResult)
                     {
                         string path = $"{savePath}/Packed/{packedName}.png";
                         packResult.SaveTextureAsset(path, true);
+                        Debug.Log(log_prefix + "Finished packing texture at " + path);
                         PoiHelpers.PingAssetAtPath(path);
                     }
                 }
@@ -161,19 +148,19 @@ namespace Poi
             PoiHelpers.DrawLine();
         }
 
-        private void DrawUnpackUI()
+        void DrawUnpackUI()
         {
             EditorGUI.BeginChangeCheck();
             {
                 unpackSource =
-                    EditorGUILayout.ObjectField("To Unpack", unpackSource, typeof(Texture2D), true) as Texture2D;
+                    EditorGUILayout.ObjectField("Packed Texture", unpackSource, typeof(Texture2D), true) as Texture2D;
             }
-            if(EditorGUI.EndChangeCheck() && unpackAutoSelectSize && unpackSource)
+            if(EditorGUI.EndChangeCheck() && unpackSizeAutoSelect)
             {
                 // Get biggest texture size from selections and make a selection in our sizes list
-                int max = new[] {unpackSource.width, unpackSource.height}.Max();
-                var size = Sizes.FirstOrDefault(i => i >= max);
-                unpackedSizeSelectionIndex = Sizes.IndexOf(size);
+                var tempSize = PoiHelpers.GetMaxSizeFromTextures(unpackSource);
+                if(tempSize != default)
+                    UnpackSize = tempSize.ClosestPowerOfTwo(AUTO_SELECT_CEILING);
             }
 
             PoiHelpers.DrawLine();
@@ -184,17 +171,14 @@ namespace Poi
 
                 EditorGUILayout.Space();
 
-                EditorGUI.BeginDisabledGroup(unpackAutoSelectSize);
-                unpackedSizeSelectionIndex = EditorGUILayout.Popup("Size", unpackedSizeSelectionIndex, SizeNames);
-                EditorGUI.EndDisabledGroup();
-
-                unpackAutoSelectSize = EditorGUILayout.Toggle("Auto select Size", unpackAutoSelectSize);
+                UnpackSize = PoiHelpers.DrawResolutionPicker(UnpackSize, ref unpackSizeIsLinked, ref unpackSizeAutoSelect, SizePresets,
+                    SizePresetNames);
 
                 PoiHelpers.DrawLine();
 
                 if(GUILayout.Button("Unpack"))
                 {
-                    var output = UnpackTextureToChannels(unpackSource);
+                    var output = UnpackTextureToChannels(unpackSource, UnpackSize);
                     string pingPath = null;
                     try
                     {
@@ -212,6 +196,7 @@ namespace Poi
                         AssetDatabase.StopAssetEditing();
                     }
 
+                    Debug.Log(log_prefix + "Finished unpacking texture at " + pingPath);
                     PoiHelpers.PingAssetAtPath(pingPath);
                 }
             }
@@ -220,11 +205,11 @@ namespace Poi
             PoiHelpers.DrawLine();
         }
 
-        Texture2D PackTexture(int size, Texture2D red, Texture2D green, Texture2D blue, Texture2D alpha)
+        Texture2D PackTexture(Vector2Int resolution, Texture2D red, Texture2D green, Texture2D blue, Texture2D alpha)
         {
             if(!PackerShader)
             {
-                Debug.LogWarning("Packer shader is missing or invalid. Can't pack textures.");
+                Debug.LogWarning(log_prefix + "Packer shader is missing or invalid. Can't pack textures.");
                 return null;
             }
 
@@ -237,7 +222,7 @@ namespace Poi
             mat.SetTexture("_Alpha", alpha);
 
             // Create texture and render to it
-            var tex = new Texture2D(size, size);
+            var tex = new Texture2D(resolution.x, resolution.y);
             tex.BakeMaterialToTexture(mat);
 
             // Cleanup
@@ -246,14 +231,14 @@ namespace Poi
             return tex;
         }
 
-        Dictionary<string, Texture2D> UnpackTextureToChannels(Texture2D packedTexture)
+        Dictionary<string, Texture2D> UnpackTextureToChannels(Texture2D packedTexture, Vector2Int resolution)
         {
-            var channels = new Dictionary<string, Texture2D>()
+            var channels = new Dictionary<string, Texture2D>
             {
-                {"red", new Texture2D(UnpackedSize, UnpackedSize)},
-                {"green", new Texture2D(UnpackedSize, UnpackedSize)},
-                {"blue", new Texture2D(UnpackedSize, UnpackedSize)},
-                {"alpha", new Texture2D(UnpackedSize, UnpackedSize)}
+                {"red", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {"green", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {"blue", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {"alpha", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)}
             };
 
             var mat = new Material(UnpackerShader);
@@ -270,7 +255,7 @@ namespace Poi
 
         string[] _tabNames;
         Shader _packerShader;
+        Shader _unpackerShader;
         string[] _sizeNames;
     }
 }
-#endif
