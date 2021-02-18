@@ -189,10 +189,98 @@ namespace Poi
             int maxH = sizes.Max(wh => wh.y);
             return new Vector2Int(maxW, maxH);
         }
+
+        internal static Texture2D PackTextures(Vector2Int resolution, Texture2D red, Texture2D green, Texture2D blue, Texture2D alpha)
+        {
+            // Setup Material
+            var mat = new Material(PoiExtensions.PackerShader);
+
+            mat.SetTexture("_Red", red);
+            mat.SetTexture("_Green", green);
+            mat.SetTexture("_Blue", blue);
+            mat.SetTexture("_Alpha", alpha);
+
+            // Create texture and render to it
+            var tex = new Texture2D(resolution.x, resolution.y);
+            tex.BakeMaterialToTexture(mat);
+
+            // Cleanup
+            PoiHelpers.DestroyAppropriate(mat);
+
+            return tex;
+        }
+
+        internal static Dictionary<string, Texture2D> UnpackTextureToChannels(Texture2D packedTexture, Vector2Int resolution)
+        {
+            var channels = new Dictionary<string, Texture2D>
+            {
+                {"red", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {"green", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {"blue", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {"alpha", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)}
+            };
+
+            var mat = new Material(PoiExtensions.UnpackerShader);
+            mat.SetTexture("_Packed", packedTexture);
+
+            for(int i = 0; i < 4; i++)
+            {
+                mat.SetFloat("_Mode", i);
+                channels.ElementAt(i).Value.BakeMaterialToTexture(mat);
+            }
+
+            return channels;
+        }
+
+        internal static void DrawWithLabelWidth(float width, Action action)
+        {
+            if(action == null)
+                return;
+            float old = EditorGUIUtility.labelWidth;
+            action.Invoke();
+            EditorGUIUtility.labelWidth = 0;
+        }
+
+        internal static PoiExtensions.PoiTextureChannel DrawChannelSelector(PoiExtensions.PoiTextureChannel currentSelection)
+        {
+            string[] labels = { "All", "Red", "Green", "Blue", "Alpha" };
+            return (PoiExtensions.PoiTextureChannel)GUILayout.SelectionGrid((int)currentSelection, labels, labels.Length);
+        }
     }
 
     internal static class PoiExtensions
     {
+        public enum PoiTextureChannel { RGBA, Red, Green, Blue, Alpha }
+        public static Shader PackerShader
+        {
+            get
+            {
+                return Shader.Find("Hidden/Poi/TexturePacker");
+            }
+        }
+        public static Shader UnpackerShader
+        {
+            get
+            {
+                return Shader.Find("Hidden/Poi/TextureUnpacker");
+            }
+        }
+
+        internal static Texture2D GetChannelAsTexture(this Texture2D tex, PoiTextureChannel chan)
+        {
+            if(chan == PoiTextureChannel.RGBA)
+                return tex;
+
+            Material mat = new Material(PackerShader);
+            mat.SetFloat("_Mode", (int)chan);
+            mat.SetTexture("_MainTex", tex);
+
+            var newTex = new Texture2D(tex.width, tex.height);
+            newTex.BakeMaterialToTexture(mat);
+
+            return newTex;
+        }
+
         /// <summary>
         /// Extension method that bakes a material to <paramref name="tex"/>
         /// </summary>
@@ -261,11 +349,9 @@ namespace Poi
             if(ceiling != null)
             {
                 int ceil = Mathf.ClosestPowerOfTwo((int) ceiling);
-                int oneBelowCeil = (int)Math.Sqrt(ceil);
 
-                // If above ceiling, root down to a lower power of two
-                x = x > ceil ? oneBelowCeil : x;
-                y = y > ceil ? oneBelowCeil : y;
+                x = Mathf.Clamp(x, x, ceil);
+                y = Mathf.Clamp(y, y, ceil);
             }
 
             return new Vector2Int(x, y);

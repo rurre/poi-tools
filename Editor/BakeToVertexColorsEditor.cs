@@ -14,7 +14,20 @@ namespace Poi
     public class BakeToVertexColorsEditor : EditorWindow
     {
         //Window
-        static readonly Vector2 MIN_WINDOW_SIZE = new Vector2(316, 200);
+        static readonly Vector2 MIN_WINDOW_SIZE = new Vector2(316, 210);
+
+        // Version
+        Version version = new Version(0, 2);
+        string SubTitle
+        {
+            get
+            {
+                if(string.IsNullOrWhiteSpace(_subTitle))
+                    _subTitle = "by Pumkin - v" + version.ToString();
+                return _subTitle;
+            }
+        }
+
 
         //Strings
         const string log_prefix = "<color=blue>Poi:</color> "; //color is hex or name
@@ -40,7 +53,7 @@ namespace Poi
             set => _selection = value;
         }
 
-        [MenuItem("Poi/Tools/Bake Vertex Colors")]
+        [MenuItem("Poi/Tools/Vertex Color Baker", priority = 11)]
         public static void ShowWindow()
         {
             //Show existing window instance. If one doesn't exist, make one.
@@ -54,7 +67,10 @@ namespace Poi
 
         void OnGUI()
         {
-            GUILayout.Space(18f);
+            EditorGUILayout.LabelField("Poi Vertex Color Baker", PoiStyles.TitleLabel);
+            EditorGUILayout.LabelField(SubTitle);
+
+            PoiHelpers.DrawLine();
 
             EditorGUI.BeginChangeCheck();
             GameObject obj = EditorGUILayout.ObjectField("Avatar", Selection, typeof(GameObject), true) as GameObject;
@@ -317,5 +333,6 @@ namespace Poi
         }
 
         static GameObject _selection;
+        private string _subTitle;
     }
 }
