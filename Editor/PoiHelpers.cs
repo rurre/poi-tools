@@ -55,11 +55,15 @@ namespace Poi
         /// Adds a suffix to the end of the string then returns it
         /// </summary>
         /// <param name="str"></param>
-        /// <param name="suffix"></param>
+        /// <param name="suffixes"></param>
         /// <returns></returns>
-        public static string AddSuffix(string str, string suffix)
+        public static string AddSuffix(string str, params string[] suffixes)
         {
-            return str + suffixSeparator + suffix;
+            StringBuilder sb = new StringBuilder(str);
+            foreach(var suff in suffixes)
+                sb.Append(suffixSeparator + suff);
+
+            return sb.ToString();
         }
 
         /// <summary>
@@ -70,16 +74,17 @@ namespace Poi
         /// <returns></returns>
         public static string RemoveSuffix(string str, params string[] suffixes)
         {
-            foreach(string sfx in suffixes)
-            {
-                string s = suffixSeparator + sfx;
-                if(!str.EndsWith(sfx))
-                    continue;
+            while(suffixes.Any(str.EndsWith))
+                foreach(string sfx in suffixes)
+                {
+                    string s = suffixSeparator + sfx;
+                    if(!str.EndsWith(sfx))
+                        continue;
 
-                int idx = str.LastIndexOf(s);
-                if(idx != -1)
-                    str = str.Remove(idx, s.Length);
-            }
+                    int idx = str.LastIndexOf(s, StringComparison.Ordinal);
+                    if(idx != -1)
+                        str = str.Remove(idx, s.Length);
+                }
             return str;
         }
 

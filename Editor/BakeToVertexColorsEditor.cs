@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices.WindowsRuntime;
+using BestHTTP.SecureProtocol.Org.BouncyCastle.Asn1;
 using UnityEditor;
 using UnityEngine;
 
@@ -109,9 +110,9 @@ namespace Poi
         /// Saves a mesh in the same folder as the original asset
         /// </summary>
         /// <param name="mesh"></param>
-        /// <param name="nameSuffix">Suffix to add to the end of the asset name</param>
+        /// <param name="nameSuffixes">Suffixes to add to the end of the asset name</param>
         /// <returns>Returns the newly created mesh asset</returns>
-        static Mesh SaveMeshAsset(Mesh mesh, string nameSuffix = "baked")
+        static Mesh SaveMeshAsset(Mesh mesh, params string[] nameSuffixes)
         {
             string assetPath = AssetDatabase.GetAssetPath(mesh);
             if(string.IsNullOrWhiteSpace(assetPath))
@@ -124,16 +125,18 @@ namespace Poi
             PoiHelpers.EnsurePathExistsInAssets(bakesDir);
 
             //Figure out mesh name
-            string fileName = PoiHelpers.RemoveSuffix(Path.GetFileNameWithoutExtension(assetPath), "baked", bakedSuffix_normals, bakedSuffix_position);
-            fileName = PoiHelpers.AddSuffix(fileName, nameSuffix);
+
+            string[] toRemove = nameSuffixes.Union(new [] {"baked", bakedSuffix_normals, bakedSuffix_position}).ToArray();
+
+            string fileName = PoiHelpers.RemoveSuffix(Path.GetFileNameWithoutExtension(assetPath), toRemove);
+            fileName = PoiHelpers.AddSuffix(fileName, nameSuffixes);
 
             string pathNoExt = Path.Combine(bakesDir, fileName);
-            string newPath = AssetDatabase.GenerateUniqueAssetPath(pathNoExt) + ".mesh";
+            string newPath = AssetDatabase.GenerateUniqueAssetPath($"{pathNoExt}.mesh");
 
-            //Save mesh, load it back, assign to renderer then clean up
+            //Save mesh, load it back, assign to renderer
             Mesh newMesh = Instantiate(mesh);
             AssetDatabase.CreateAsset(newMesh, newPath);
-            PoiHelpers.DestroyAppropriate(newMesh);
 
             newMesh = AssetDatabase.LoadAssetAtPath<Mesh>(newPath);
 
@@ -216,6 +219,7 @@ namespace Poi
 
         static void BakePositionsToColors(MeshInfo[] meshInfos)
         {
+            var queue = new Dictionary<MeshInfo, Mesh>();
             try
             {
                 AssetDatabase.StartAssetEditing();
@@ -230,9 +234,9 @@ namespace Poi
                         colors[i] = new Color(verts[i].x, verts[i].y, verts[i].z);
                     meshInfo.sharedMesh.colors = colors;
 
-                    Mesh newMesh = null;
-                    if(newMesh = SaveMeshAsset(meshInfo.sharedMesh, bakedSuffix_position))
-                        SetRendererSharedMesh(meshInfo.ownerRenderer, newMesh);
+                    Mesh newMesh = null;    //Create new mesh asset and add it to queue
+                    if(newMesh = SaveMeshAsset(meshInfo.sharedMesh, meshInfo.ownerRenderer.gameObject.name, bakedSuffix_position))
+                        queue.Add(meshInfo, newMesh);
                 }
             }
             catch(Exception ex)
@@ -243,10 +247,17 @@ namespace Poi
             {
                 AssetDatabase.StopAssetEditing();
             }
+
+            //After all meshes are imported assign the meshes
+            foreach(var kv in queue)
+            {
+                SetRendererSharedMesh(kv.Key.ownerRenderer, kv.Value);
+            }
         }
 
         static void BakeAveragedNormalsToColors(params MeshInfo[] infos)
         {
+            var queue = new Dictionary<MeshInfo, Mesh>();
             try
             {
                 AssetDatabase.StartAssetEditing();
@@ -302,8 +313,8 @@ namespace Poi
                     meshInfo.sharedMesh.colors = colors;
 
                     Mesh newMesh = null;
-                    if(newMesh = SaveMeshAsset(meshInfo.sharedMesh, bakedSuffix_normals))
-                        SetRendererSharedMesh(meshInfo.ownerRenderer, newMesh);
+                    if(newMesh = SaveMeshAsset(meshInfo.sharedMesh, meshInfo.ownerRenderer.gameObject.name, bakedSuffix_normals))
+                        queue.Add(meshInfo, newMesh);
                 }
             }
             catch(Exception ex)
@@ -314,6 +325,10 @@ namespace Poi
             {
                 AssetDatabase.StopAssetEditing();
             }
+
+            //Assign all new meshes to their renderers
+            foreach(var kv in queue)
+                SetRendererSharedMesh(kv.Key.ownerRenderer, kv.Value);
         }
 
         struct MeshInfo
