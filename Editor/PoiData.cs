@@ -8,6 +8,11 @@ using UnityEngine;
 
 namespace Poi
 {
+    internal static class PoiPaths
+    {
+        public const string defaultResourcesPath = "Library/unity default resources/";
+    }
+
     internal static class PoiStyles
     {
         public static GUIStyle BigButton

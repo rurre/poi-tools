@@ -1,11 +1,7 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices.WindowsRuntime;
-using BestHTTP.SecureProtocol.Org.BouncyCastle.Asn1;
 using UnityEditor;
 using UnityEngine;
 
@@ -18,7 +14,7 @@ namespace Poi
         static readonly Vector2 MIN_WINDOW_SIZE = new Vector2(316, 210);
 
         // Version
-        Version version = new Version(0, 2);
+        Version version = new Version(1, 1);
         string SubTitle
         {
             get
@@ -37,6 +33,7 @@ namespace Poi
         const string bakedSuffix_position = "baked_position";
 
         const string bakesFolderName = "Baked";
+        const string defaultUnityAssetBakesFolder = "Default Unity Resources";
 
         const string hint_bakeAverageNormals = "Use this if you want seamless outlines";
         const string hint_bakeVertexPositions = "Use this if you want scrolling emission";
@@ -115,20 +112,34 @@ namespace Poi
         static Mesh SaveMeshAsset(Mesh mesh, params string[] nameSuffixes)
         {
             string assetPath = AssetDatabase.GetAssetPath(mesh);
+
             if(string.IsNullOrWhiteSpace(assetPath))
+            {
+                Debug.LogWarning(log_prefix + "Invalid asset path for " + mesh.name);
                 return null;
+            }
 
             //Figure out folder name
             string bakesDir = $"{Path.GetDirectoryName(assetPath)}";
+
+            //Handle default assets
+            if(bakesDir.StartsWith("Library"))
+                bakesDir = $"Assets\\{defaultUnityAssetBakesFolder}";
+
             if(!bakesDir.EndsWith(bakesFolderName))
-                bakesDir += $"/{bakesFolderName}";
+                bakesDir += $"\\{bakesFolderName}";
+
+            if(!assetPath.Contains('.'))
+                assetPath += '\\';
+
             PoiHelpers.EnsurePathExistsInAssets(bakesDir);
 
             //Figure out mesh name
 
             string[] toRemove = nameSuffixes.Union(new [] {"baked", bakedSuffix_normals, bakedSuffix_position}).ToArray();
 
-            string fileName = PoiHelpers.RemoveSuffix(Path.GetFileNameWithoutExtension(assetPath), toRemove);
+            string nameNoExt = Path.GetFileNameWithoutExtension(assetPath);
+            string fileName = PoiHelpers.RemoveSuffix(nameNoExt, toRemove);
             fileName = PoiHelpers.AddSuffix(fileName, nameSuffixes);
 
             string pathNoExt = Path.Combine(bakesDir, fileName);
@@ -234,8 +245,9 @@ namespace Poi
                         colors[i] = new Color(verts[i].x, verts[i].y, verts[i].z);
                     meshInfo.sharedMesh.colors = colors;
 
-                    Mesh newMesh = null;    //Create new mesh asset and add it to queue
-                    if(newMesh = SaveMeshAsset(meshInfo.sharedMesh, meshInfo.ownerRenderer.gameObject.name, bakedSuffix_position))
+                    //Create new mesh asset and add it to queue
+                    Mesh newMesh = SaveMeshAsset(meshInfo.sharedMesh, meshInfo.ownerRenderer.gameObject.name,  bakedSuffix_position);
+                    if(newMesh)
                         queue.Add(meshInfo, newMesh);
                 }
             }
@@ -312,8 +324,8 @@ namespace Poi
                     }
                     meshInfo.sharedMesh.colors = colors;
 
-                    Mesh newMesh = null;
-                    if(newMesh = SaveMeshAsset(meshInfo.sharedMesh, meshInfo.ownerRenderer.gameObject.name, bakedSuffix_normals))
+                    Mesh newMesh = SaveMeshAsset(meshInfo.sharedMesh, meshInfo.ownerRenderer.gameObject.name, bakedSuffix_normals);
+                    if(newMesh)
                         queue.Add(meshInfo, newMesh);
                 }
             }

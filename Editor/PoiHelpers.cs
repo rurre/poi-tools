@@ -59,10 +59,18 @@ namespace Poi
         /// <returns></returns>
         public static string AddSuffix(string str, params string[] suffixes)
         {
+            bool ignoreSeparatorOnce = string.IsNullOrWhiteSpace(str);
             StringBuilder sb = new StringBuilder(str);
             foreach(var suff in suffixes)
+            {
+                if(ignoreSeparatorOnce)
+                {
+                    sb.Append(suff);
+                    ignoreSeparatorOnce = false;
+                    continue;
+                }
                 sb.Append(suffixSeparator + suff);
-
+            }
             return sb.ToString();
         }
 

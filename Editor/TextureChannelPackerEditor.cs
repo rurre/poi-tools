@@ -21,7 +21,7 @@ namespace Poi
         string unpackedName = "unpacked";
 
         // Version
-        Version version = new Version(0,2);
+        Version version = new Version(1, 1);
         string SubTitle
         {
             get
