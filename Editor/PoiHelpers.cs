@@ -1,5 +1,4 @@
-﻿#if UNITY_EDITOR
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -56,11 +55,23 @@ namespace Poi
         /// Adds a suffix to the end of the string then returns it
         /// </summary>
         /// <param name="str"></param>
-        /// <param name="suffix"></param>
+        /// <param name="suffixes"></param>
         /// <returns></returns>
-        public static string AddSuffix(string str, string suffix)
+        public static string AddSuffix(string str, params string[] suffixes)
         {
-            return str + suffixSeparator + suffix;
+            bool ignoreSeparatorOnce = string.IsNullOrWhiteSpace(str);
+            StringBuilder sb = new StringBuilder(str);
+            foreach(var suff in suffixes)
+            {
+                if(ignoreSeparatorOnce)
+                {
+                    sb.Append(suff);
+                    ignoreSeparatorOnce = false;
+                    continue;
+                }
+                sb.Append(suffixSeparator + suff);
+            }
+            return sb.ToString();
         }
 
         /// <summary>
@@ -71,19 +82,19 @@ namespace Poi
         /// <returns></returns>
         public static string RemoveSuffix(string str, params string[] suffixes)
         {
-            foreach(string sfx in suffixes)
-            {
-                string s = suffixSeparator + sfx;
-                if(!str.EndsWith(sfx))
-                    continue;
+            while(suffixes.Any(str.EndsWith))
+                foreach(string sfx in suffixes)
+                {
+                    string s = suffixSeparator + sfx;
+                    if(!str.EndsWith(sfx))
+                        continue;
 
-                int idx = str.LastIndexOf(s);
-                if(idx != -1)
-                    str = str.Remove(idx, s.Length);
-            }
+                    int idx = str.LastIndexOf(s, StringComparison.Ordinal);
+                    if(idx != -1)
+                        str = str.Remove(idx, s.Length);
+                }
             return str;
         }
-
 
         /// <summary>
         /// Draws a GUI ilne
@@ -128,7 +139,160 @@ namespace Poi
             return path;
         }
 
-        #region Extensions
+        /// <summary>
+        /// Selects and highlights the asset in your unity Project tab
+        /// </summary>
+        /// <param name="path"></param>
+        internal static void PingAssetAtPath(string path)
+        {
+            var inst = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path).GetInstanceID();
+            EditorGUIUtility.PingObject(inst);
+        }
+
+        internal static Vector2Int DrawResolutionPicker(Vector2Int size, ref bool linked, ref bool autoDetect, int[] presets = null, string[] presetNames = null)
+        {
+            EditorGUI.BeginDisabledGroup(autoDetect);
+            EditorGUILayout.BeginHorizontal();
+            {
+                EditorGUILayout.PrefixLabel("Size");
+
+                EditorGUI.BeginChangeCheck();
+                size.x = EditorGUILayout.IntField(size.x);
+                if(linked && EditorGUI.EndChangeCheck())
+                    size.y = size.x;
+
+                EditorGUILayout.LabelField("x", GUILayout.MaxWidth(12));
+
+                EditorGUI.BeginChangeCheck();
+                size.y = EditorGUILayout.IntField(size.y);
+                if(linked && EditorGUI.EndChangeCheck())
+                    size.x = size.y;
+
+                if(presets != null && presetNames != null)
+                {
+                    EditorGUI.BeginChangeCheck();
+                    int selectedPresetIndex = EditorGUILayout.Popup(GUIContent.none, -1, presetNames, GUILayout.MaxWidth(16));
+                    if(EditorGUI.EndChangeCheck() && selectedPresetIndex != -1)
+                        size = new Vector2Int(presets[selectedPresetIndex], presets[selectedPresetIndex]);
+                }
+
+                linked = GUILayout.Toggle(linked, "L", EditorStyles.miniButton, GUILayout.MaxWidth(16));
+            }
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUI.EndDisabledGroup();
+
+            autoDetect = EditorGUILayout.Toggle("Auto detect", autoDetect);
+
+            return size;
+        }
+
+        /// <summary>
+        /// Gets the combined maximum width and height of the passed in textures
+        /// </summary>
+        /// <param name="textures"></param>
+        /// <returns></returns>
+        internal static Vector2Int GetMaxSizeFromTextures(params Texture2D[] textures)
+        {
+            var sizes = textures.Where(tex => tex).Select(tex => new Vector2Int(tex.width, tex.height)).ToArray();
+            if(sizes.Length == 0)
+                return default;
+
+            int maxW = sizes.Max(wh => wh.x);
+            int maxH = sizes.Max(wh => wh.y);
+            return new Vector2Int(maxW, maxH);
+        }
+
+        internal static Texture2D PackTextures(Vector2Int resolution, Texture2D red, Texture2D green, Texture2D blue, Texture2D alpha)
+        {
+            // Setup Material
+            var mat = new Material(PoiExtensions.PackerShader);
+
+            mat.SetTexture("_Red", red);
+            mat.SetTexture("_Green", green);
+            mat.SetTexture("_Blue", blue);
+            mat.SetTexture("_Alpha", alpha);
+
+            // Create texture and render to it
+            var tex = new Texture2D(resolution.x, resolution.y);
+            tex.BakeMaterialToTexture(mat);
+
+            // Cleanup
+            PoiHelpers.DestroyAppropriate(mat);
+
+            return tex;
+        }
+
+        internal static Dictionary<string, Texture2D> UnpackTextureToChannels(Texture2D packedTexture, Vector2Int resolution)
+        {
+            var channels = new Dictionary<string, Texture2D>
+            {
+                {"red", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {"green", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {"blue", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {"alpha", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)}
+            };
+
+            var mat = new Material(PoiExtensions.UnpackerShader);
+            mat.SetTexture("_Packed", packedTexture);
+
+            for(int i = 0; i < 4; i++)
+            {
+                mat.SetFloat("_Mode", i);
+                channels.ElementAt(i).Value.BakeMaterialToTexture(mat);
+            }
+
+            return channels;
+        }
+
+        internal static void DrawWithLabelWidth(float width, Action action)
+        {
+            if(action == null)
+                return;
+            float old = EditorGUIUtility.labelWidth;
+            action.Invoke();
+            EditorGUIUtility.labelWidth = 0;
+        }
+
+        internal static PoiExtensions.PoiTextureChannel DrawChannelSelector(PoiExtensions.PoiTextureChannel currentSelection)
+        {
+            string[] labels = { "All", "Red", "Green", "Blue", "Alpha" };
+            return (PoiExtensions.PoiTextureChannel)GUILayout.SelectionGrid((int)currentSelection, labels, labels.Length);
+        }
+    }
+
+    internal static class PoiExtensions
+    {
+        public enum PoiTextureChannel { RGBA, Red, Green, Blue, Alpha }
+        public static Shader PackerShader
+        {
+            get
+            {
+                return Shader.Find("Hidden/Poi/TexturePacker");
+            }
+        }
+        public static Shader UnpackerShader
+        {
+            get
+            {
+                return Shader.Find("Hidden/Poi/TextureUnpacker");
+            }
+        }
+
+        internal static Texture2D GetChannelAsTexture(this Texture2D tex, PoiTextureChannel chan)
+        {
+            if(chan == PoiTextureChannel.RGBA)
+                return tex;
+
+            Material mat = new Material(PackerShader);
+            mat.SetFloat("_Mode", (int)chan);
+            mat.SetTexture("_MainTex", tex);
+
+            var newTex = new Texture2D(tex.width, tex.height);
+            newTex.BakeMaterialToTexture(mat);
+
+            return newTex;
+        }
 
         /// <summary>
         /// Extension method that bakes a material to <paramref name="tex"/>
@@ -160,11 +324,11 @@ namespace Poi
             if(!assetPath.StartsWith("Assets", StringComparison.OrdinalIgnoreCase))
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(assetPath));
-                assetPath = AbsolutePathToLocalAssetsPath(assetPath);
+                assetPath = PoiHelpers.AbsolutePathToLocalAssetsPath(assetPath);
             }
             else
             {
-                string absolutePath = LocalAssetsPathToAbsolutePath(assetPath);
+                string absolutePath = PoiHelpers.LocalAssetsPathToAbsolutePath(assetPath);
                 Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
             }
 
@@ -184,13 +348,26 @@ namespace Poi
             return finalTex;
         }
 
-        internal static void PingAssetAtPath(string path)
+        /// <summary>
+        /// Rounds vector to closest power of two. Optionally, if above ceiling, square root down by one power of two
+        /// </summary>
+        /// <param name="vec"></param>
+        /// <param name="ceiling">Power of two ceiling. Will be rounded to power of two if not power of two already</param>
+        /// <returns></returns>
+        internal static Vector2Int ClosestPowerOfTwo(this Vector2Int vec, int? ceiling = null)
         {
-            var inst = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path).GetInstanceID();
-            EditorGUIUtility.PingObject(inst);
-        }
+            int x = Mathf.ClosestPowerOfTwo(vec.x);
+            int y = Mathf.ClosestPowerOfTwo(vec.y);
 
-        #endregion
+            if(ceiling != null)
+            {
+                int ceil = Mathf.ClosestPowerOfTwo((int) ceiling);
+
+                x = Mathf.Clamp(x, x, ceil);
+                y = Mathf.Clamp(y, y, ceil);
+            }
+
+            return new Vector2Int(x, y);
+        }
     }
 }
-#endif
