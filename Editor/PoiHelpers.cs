@@ -203,7 +203,7 @@ namespace Poi
             return new Vector2Int(maxW, maxH);
         }
 
-        internal static Texture2D PackTextures(Vector2Int resolution, Texture2D red, Texture2D green, Texture2D blue, Texture2D alpha)
+        internal static Texture2D PackTextures(Vector2Int resolution, Texture2D red, Texture2D green, Texture2D blue, Texture2D alpha, bool invertRed, bool invertGreen, bool invertBlue, bool invertAlpha)
         {
             // Setup Material
             var mat = new Material(PoiExtensions.PackerShader);
@@ -213,28 +213,38 @@ namespace Poi
             mat.SetTexture("_Blue", blue);
             mat.SetTexture("_Alpha", alpha);
 
+            mat.SetInt("_Invert_Red", Convert.ToInt32(invertRed));
+            mat.SetInt("_Invert_Green", Convert.ToInt32(invertGreen));
+            mat.SetInt("_Invert_Blue", Convert.ToInt32(invertBlue));
+            mat.SetInt("_Invert_Alpha", Convert.ToInt32(invertAlpha));
+
             // Create texture and render to it
             var tex = new Texture2D(resolution.x, resolution.y);
             tex.BakeMaterialToTexture(mat);
 
             // Cleanup
-            PoiHelpers.DestroyAppropriate(mat);
+            DestroyAppropriate(mat);
 
             return tex;
         }
 
-        internal static Dictionary<string, Texture2D> UnpackTextureToChannels(Texture2D packedTexture, Vector2Int resolution)
+        internal static Dictionary<string, Texture2D> UnpackTextureToChannels(Texture2D packedTexture, bool invert, Vector2Int resolution)
         {
             var channels = new Dictionary<string, Texture2D>
             {
-                {"red", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
-                {"green", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
-                {"blue", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
-                {"alpha", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)}
+                {PoiExtensions.PoiTextureChannel.Red.ToString().ToLower(),
+                    new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {PoiExtensions.PoiTextureChannel.Green.ToString().ToLower(),
+                    new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {PoiExtensions.PoiTextureChannel.Blue.ToString().ToLower(),
+                    new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {PoiExtensions.PoiTextureChannel.Alpha.ToString().ToLower(),
+                    new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)}
             };
 
             var mat = new Material(PoiExtensions.UnpackerShader);
-            mat.SetTexture("_Packed", packedTexture);
+            mat.SetTexture("_MainTex", packedTexture);
+            mat.SetInt("_Invert", Convert.ToInt32(invert));
 
             for(int i = 0; i < 4; i++)
             {
@@ -251,12 +261,13 @@ namespace Poi
                 return;
             float old = EditorGUIUtility.labelWidth;
             action.Invoke();
-            EditorGUIUtility.labelWidth = 0;
+            EditorGUIUtility.labelWidth = old;
         }
 
-        internal static PoiExtensions.PoiTextureChannel DrawChannelSelector(PoiExtensions.PoiTextureChannel currentSelection)
+        internal static PoiExtensions.PoiTextureChannel DrawChannelSelector(PoiExtensions.PoiTextureChannel currentSelection, params string[] labels)
         {
-            string[] labels = { "All", "Red", "Green", "Blue", "Alpha" };
+            if(labels == null)
+                return PoiExtensions.PoiTextureChannel.RGBA;
             return (PoiExtensions.PoiTextureChannel)GUILayout.SelectionGrid((int)currentSelection, labels, labels.Length);
         }
     }
@@ -279,17 +290,23 @@ namespace Poi
             }
         }
 
-        internal static Texture2D GetChannelAsTexture(this Texture2D tex, PoiTextureChannel chan)
+        internal static Texture2D GetChannelAsTexture(this Texture2D tex, PoiTextureChannel chan, bool invert = false, Vector2Int sizeOverride = default)
         {
             if(chan == PoiTextureChannel.RGBA)
                 return tex;
 
-            Material mat = new Material(PackerShader);
-            mat.SetFloat("_Mode", (int)chan);
+            if(sizeOverride == default)
+                sizeOverride = new Vector2Int(tex.width, tex.height);
+
+            Material mat = new Material(UnpackerShader);
+            mat.SetFloat("_Mode", (int)chan - 1);
+            mat.SetInt("_Invert", Convert.ToInt32(invert));
             mat.SetTexture("_MainTex", tex);
 
-            var newTex = new Texture2D(tex.width, tex.height);
+            var newTex = new Texture2D(sizeOverride.x, sizeOverride.y, TextureFormat.RGB24, true);
+            newTex.name = chan.ToString();
             newTex.BakeMaterialToTexture(mat);
+            newTex.Apply(false, false);
 
             return newTex;
         }
@@ -309,6 +326,7 @@ namespace Poi
             //transfer image from rendertexture to texture
             RenderTexture.active = renderTexture;
             tex.ReadPixels(new Rect(Vector2.zero, res), 0, 0);
+            tex.Apply(false, false);
 
             //clean up variables
             RenderTexture.active = null;
