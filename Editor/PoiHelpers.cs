@@ -80,10 +80,13 @@ namespace Poi
         /// <param name="str"></param>
         /// <param name="suffixes">Each to be removed in order</param>
         /// <returns></returns>
-        public static string RemoveSuffix(string str, params string[] suffixes)
+        public static string RemoveSuffix(string str, string[] suffixes)
         {
-            while(suffixes.Any(str.EndsWith))
-                foreach(string sfx in suffixes)
+            var suffixList = suffixes.ToList();
+            suffixList.Remove(str);
+
+            while(suffixList.Any(str.EndsWith))
+                foreach(string sfx in suffixList)
                 {
                     string s = suffixSeparator + sfx;
                     if(!str.EndsWith(sfx))

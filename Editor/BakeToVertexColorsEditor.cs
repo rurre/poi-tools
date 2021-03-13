@@ -14,7 +14,7 @@ namespace Poi
         static readonly Vector2 MIN_WINDOW_SIZE = new Vector2(316, 210);
 
         // Version
-        Version version = new Version(1, 1);
+        Version version = new Version(1, 2);
         string SubTitle
         {
             get
@@ -107,9 +107,9 @@ namespace Poi
         /// Saves a mesh in the same folder as the original asset
         /// </summary>
         /// <param name="mesh"></param>
-        /// <param name="nameSuffixes">Suffixes to add to the end of the asset name</param>
+        /// <param name="newName">The new name of the mesh</param>
         /// <returns>Returns the newly created mesh asset</returns>
-        static Mesh SaveMeshAsset(Mesh mesh, params string[] nameSuffixes)
+        static Mesh SaveMeshAsset(Mesh mesh, string newName)
         {
             string assetPath = AssetDatabase.GetAssetPath(mesh);
 
@@ -134,15 +134,8 @@ namespace Poi
 
             PoiHelpers.EnsurePathExistsInAssets(bakesDir);
 
-            //Figure out mesh name
-
-            string[] toRemove = nameSuffixes.Union(new [] {"baked", bakedSuffix_normals, bakedSuffix_position}).ToArray();
-
-            string nameNoExt = Path.GetFileNameWithoutExtension(assetPath);
-            string fileName = PoiHelpers.RemoveSuffix(nameNoExt, toRemove);
-            fileName = PoiHelpers.AddSuffix(fileName, nameSuffixes);
-
-            string pathNoExt = Path.Combine(bakesDir, fileName);
+            //Generate path
+            string pathNoExt = Path.Combine(bakesDir, newName);
             string newPath = AssetDatabase.GenerateUniqueAssetPath($"{pathNoExt}.mesh");
 
             //Save mesh, load it back, assign to renderer
@@ -246,7 +239,8 @@ namespace Poi
                     meshInfo.sharedMesh.colors = colors;
 
                     //Create new mesh asset and add it to queue
-                    Mesh newMesh = SaveMeshAsset(meshInfo.sharedMesh, meshInfo.ownerRenderer.gameObject.name,  bakedSuffix_position);
+                    string name = PoiHelpers.AddSuffix(meshInfo.ownerRenderer.gameObject.name, bakedSuffix_position);
+                    Mesh newMesh = SaveMeshAsset(meshInfo.sharedMesh, name);
                     if(newMesh)
                         queue.Add(meshInfo, newMesh);
                 }
@@ -324,7 +318,8 @@ namespace Poi
                     }
                     meshInfo.sharedMesh.colors = colors;
 
-                    Mesh newMesh = SaveMeshAsset(meshInfo.sharedMesh, meshInfo.ownerRenderer.gameObject.name, bakedSuffix_normals);
+                    string name = PoiHelpers.AddSuffix(meshInfo.ownerRenderer.gameObject.name, bakedSuffix_normals);
+                    Mesh newMesh = SaveMeshAsset(meshInfo.sharedMesh, name);
                     if(newMesh)
                         queue.Add(meshInfo, newMesh);
                 }
