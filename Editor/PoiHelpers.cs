@@ -1,5 +1,4 @@
-﻿#if UNITY_EDITOR
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -7,7 +6,6 @@ using System.Text;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
 
 namespace Poi
 {
@@ -57,34 +55,24 @@ namespace Poi
         /// Adds a suffix to the end of the string then returns it
         /// </summary>
         /// <param name="str"></param>
-        /// <param name="suffix"></param>
+        /// <param name="suffixes"></param>
         /// <returns></returns>
-        public static string AddSuffix(string str, string suffix)
+        public static string AddSuffix(string str, params string[] suffixes)
         {
-            return str + suffixSeparator + suffix;
-        }
-
-        /// <summary>
-        /// Removes suffix from the end of string then returns it
-        /// </summary>
-        /// <param name="str"></param>
-        /// <param name="suffixes">Each to be removed in order</param>
-        /// <returns></returns>
-        public static string RemoveSuffix(string str, params string[] suffixes)
-        {
-            foreach(string sfx in suffixes)
+            bool ignoreSeparatorOnce = string.IsNullOrWhiteSpace(str);
+            StringBuilder sb = new StringBuilder(str);
+            foreach(var suff in suffixes)
             {
-                string s = suffixSeparator + sfx;
-                if(!str.EndsWith(sfx))
+                if(ignoreSeparatorOnce)
+                {
+                    sb.Append(suff);
+                    ignoreSeparatorOnce = false;
                     continue;
-
-                int idx = str.LastIndexOf(s);
-                if(idx != -1)
-                    str = str.Remove(idx, s.Length);
+                }
+                sb.Append(suffixSeparator + suff);
             }
-            return str;
+            return sb.ToString();
         }
-
 
         /// <summary>
         /// Draws a GUI ilne
@@ -129,7 +117,6 @@ namespace Poi
             return path;
         }
 
-        #region Extensions
         /// <summary>
         /// Selects and highlights the asset in your unity Project tab
         /// </summary>
@@ -194,7 +181,7 @@ namespace Poi
             return new Vector2Int(maxW, maxH);
         }
 
-        internal static Texture2D PackTextures(Vector2Int resolution, Texture2D red, Texture2D green, Texture2D blue, Texture2D alpha, int invertRed = 0, int invertGreen = 0, int invertBlue = 0, int invertAlpha = 0)
+        internal static Texture2D PackTextures(Vector2Int resolution, Texture2D red, Texture2D green, Texture2D blue, Texture2D alpha, bool invertRed, bool invertGreen, bool invertBlue, bool invertAlpha)
         {
             // Setup Material
             var mat = new Material(PoiExtensions.PackerShader);
@@ -204,10 +191,10 @@ namespace Poi
             mat.SetTexture("_Blue", blue);
             mat.SetTexture("_Alpha", alpha);
 
-            mat.SetInt("_Invert_Red", invertRed);
-            mat.SetInt("_Invert_Green", invertGreen);
-            mat.SetInt("_Invert_Blue", invertBlue);
-            mat.SetInt("_Invert_Alpha", invertAlpha);
+            mat.SetInt("_Invert_Red", Convert.ToInt32(invertRed));
+            mat.SetInt("_Invert_Green", Convert.ToInt32(invertGreen));
+            mat.SetInt("_Invert_Blue", Convert.ToInt32(invertBlue));
+            mat.SetInt("_Invert_Alpha", Convert.ToInt32(invertAlpha));
 
             // Create texture and render to it
             var tex = new Texture2D(resolution.x, resolution.y);
@@ -219,18 +206,23 @@ namespace Poi
             return tex;
         }
 
-        internal static Dictionary<string, Texture2D> UnpackTextureToChannels(Texture2D packedTexture, Vector2Int resolution)
+        internal static Dictionary<string, Texture2D> UnpackTextureToChannels(Texture2D packedTexture, bool invert, Vector2Int resolution)
         {
             var channels = new Dictionary<string, Texture2D>
             {
-                {"red", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
-                {"green", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
-                {"blue", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
-                {"alpha", new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)}
+                {PoiExtensions.PoiTextureChannel.Red.ToString().ToLower(),
+                    new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {PoiExtensions.PoiTextureChannel.Green.ToString().ToLower(),
+                    new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {PoiExtensions.PoiTextureChannel.Blue.ToString().ToLower(),
+                    new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)},
+                {PoiExtensions.PoiTextureChannel.Alpha.ToString().ToLower(),
+                    new Texture2D(resolution.x, resolution.y, TextureFormat.RGB24, true)}
             };
 
             var mat = new Material(PoiExtensions.UnpackerShader);
-            mat.mainTexture = packedTexture;
+            mat.SetTexture("_MainTex", packedTexture);
+            mat.SetInt("_Invert", Convert.ToInt32(invert));
 
             for(int i = 0; i < 4; i++)
             {
@@ -247,13 +239,34 @@ namespace Poi
                 return;
             float old = EditorGUIUtility.labelWidth;
             action.Invoke();
-            EditorGUIUtility.labelWidth = 0;
+            EditorGUIUtility.labelWidth = old;
         }
 
-        internal static PoiExtensions.PoiTextureChannel DrawChannelSelector(PoiExtensions.PoiTextureChannel currentSelection)
+        internal static PoiExtensions.PoiTextureChannel DrawChannelSelector(PoiExtensions.PoiTextureChannel currentSelection, params string[] labels)
         {
-            string[] labels = { "All", "Red", "Green", "Blue", "Alpha" };
+            if(labels == null)
+                return PoiExtensions.PoiTextureChannel.RGBA;
             return (PoiExtensions.PoiTextureChannel)GUILayout.SelectionGrid((int)currentSelection, labels, labels.Length);
+        }
+
+        internal static void DrawInsideHorizontalBox(Action action)
+        {
+            if(action == null)
+                return;
+
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            action.Invoke();
+            EditorGUILayout.EndHorizontal();
+        }
+
+        internal static void DrawInsideVerticalBox(Action action)
+        {
+            if(action == null)
+                return;
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            action.Invoke();
+            EditorGUILayout.EndVertical();
         }
     }
 
@@ -275,18 +288,23 @@ namespace Poi
             }
         }
 
-        internal static Texture2D GetChannelAsTexture(this Texture2D tex, PoiTextureChannel chan, int invertChannel)
+        internal static Texture2D GetChannelAsTexture(this Texture2D tex, PoiTextureChannel chan, bool invert = false, Vector2Int sizeOverride = default)
         {
             if(chan == PoiTextureChannel.RGBA)
                 return tex;
 
-            Material mat = new Material(UnpackerShader);
-            mat.SetInt("_Invert", invertChannel);
-            mat.SetFloat("_Mode", (int)chan);
-            mat.mainTexture = tex;
+            if(sizeOverride == default)
+                sizeOverride = new Vector2Int(tex.width, tex.height);
 
-            var newTex = new Texture2D(tex.width, tex.height, TextureFormat.RGB24, false, true);
+            Material mat = new Material(UnpackerShader);
+            mat.SetFloat("_Mode", (int)chan - 1);
+            mat.SetInt("_Invert", Convert.ToInt32(invert));
+            mat.SetTexture("_MainTex", tex);
+
+            var newTex = new Texture2D(sizeOverride.x, sizeOverride.y, TextureFormat.RGB24, true);
+            newTex.name = chan.ToString();
             newTex.BakeMaterialToTexture(mat);
+            newTex.Apply(false, false);
 
             return newTex;
         }
@@ -303,11 +321,12 @@ namespace Poi
             RenderTexture renderTexture = RenderTexture.GetTemporary(res.x, res.y);
             Graphics.Blit(null, renderTexture, materialToBake);
 
-            //Transfer image from RenderTexture to Texture
+            //transfer image from rendertexture to texture
             RenderTexture.active = renderTexture;
-            tex.ReadPixels(new Rect(Vector2.zero, res), 0, 0, true);
+            tex.ReadPixels(new Rect(Vector2.zero, res), 0, 0);
+            tex.Apply(false, false);
 
-            //Clean up variables
+            //clean up variables
             RenderTexture.active = null;
             RenderTexture.ReleaseTemporary(renderTexture);
         }
@@ -338,9 +357,6 @@ namespace Poi
 
         internal static Texture2D GetReadableTextureCopy(this Texture2D tex)
         {
-            if(tex.isReadable)
-                return tex;
-
             byte[] pix = tex.GetRawTextureData();
             Texture2D finalTex = new Texture2D(tex.width, tex.height, tex.format, false);
             finalTex.LoadRawTextureData(pix);
@@ -348,18 +364,26 @@ namespace Poi
             return finalTex;
         }
 
-        internal static void PingAssetAtPath(string path)
+        /// <summary>
+        /// Rounds vector to closest power of two. Optionally, if above ceiling, square root down by one power of two
+        /// </summary>
+        /// <param name="vec"></param>
+        /// <param name="ceiling">Power of two ceiling. Will be rounded to power of two if not power of two already</param>
+        /// <returns></returns>
+        internal static Vector2Int ClosestPowerOfTwo(this Vector2Int vec, int? ceiling = null)
         {
-            var inst = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path).GetInstanceID();
-            EditorGUIUtility.PingObject(inst);
-        }
+            int x = Mathf.ClosestPowerOfTwo(vec.x);
+            int y = Mathf.ClosestPowerOfTwo(vec.y);
 
-        internal static bool IsNullOrEmpty<T>(this T[] array)
-        {
-            return array == null || array.Length == 0;
-        }
+            if(ceiling != null)
+            {
+                int ceil = Mathf.ClosestPowerOfTwo((int) ceiling);
 
-        #endregion
+                x = Mathf.Clamp(x, x, ceil);
+                y = Mathf.Clamp(y, y, ceil);
+            }
+
+            return new Vector2Int(x, y);
+        }
     }
 }
-#endif

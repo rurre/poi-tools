@@ -14,7 +14,8 @@ namespace Poi
         static readonly Vector2 MIN_WINDOW_SIZE = new Vector2(316, 210);
 
         // Version
-        Version version = new Version(1, 1);
+        Version version = new Version(1, 3);
+
         string SubTitle
         {
             get
@@ -28,6 +29,9 @@ namespace Poi
 
         //Strings
         const string log_prefix = "<color=blue>Poi:</color> "; //color is hex or name
+
+        const string ui_title = "Poi Vertex Color Baker";
+        const string ui_selected = "Avatar";
 
         const string bakedSuffix_normals = "baked_normals";
         const string bakedSuffix_position = "baked_position";
@@ -50,6 +54,7 @@ namespace Poi
             get => _selection;
             set => _selection = value;
         }
+        static bool IgnoreCustomNormals { get; set; }
 
         [MenuItem("Poi/Tools/Vertex Color Baker", priority = 11)]
         public static void ShowWindow()
@@ -65,13 +70,13 @@ namespace Poi
 
         void OnGUI()
         {
-            EditorGUILayout.LabelField("Poi Vertex Color Baker", PoiStyles.TitleLabel);
+            EditorGUILayout.LabelField(ui_title, PoiStyles.TitleLabel);
             EditorGUILayout.LabelField(SubTitle);
 
             PoiHelpers.DrawLine();
 
             EditorGUI.BeginChangeCheck();
-            GameObject obj = EditorGUILayout.ObjectField("Avatar", Selection, typeof(GameObject), true) as GameObject;
+            GameObject obj = EditorGUILayout.ObjectField(ui_selected, Selection, typeof(GameObject), true) as GameObject;
             if(EditorGUI.EndChangeCheck())
                 Selection = obj;
 
@@ -80,6 +85,12 @@ namespace Poi
             EditorGUI.BeginDisabledGroup(!Selection);
             {
                 EditorGUILayout.HelpBox(hint_bakeAverageNormals, MessageType.Info);
+
+                PoiHelpers.DrawInsideVerticalBox(() =>
+                {
+                    IgnoreCustomNormals = EditorGUILayout.ToggleLeft("Ignore custom normals", IgnoreCustomNormals);
+                });
+
                 if(GUILayout.Button(button_bakeAverageNormals))
                 {
                     var meshes = GetAllMeshInfos(Selection);
@@ -107,9 +118,9 @@ namespace Poi
         /// Saves a mesh in the same folder as the original asset
         /// </summary>
         /// <param name="mesh"></param>
-        /// <param name="nameSuffixes">Suffixes to add to the end of the asset name</param>
+        /// <param name="newName">The new name of the mesh</param>
         /// <returns>Returns the newly created mesh asset</returns>
-        static Mesh SaveMeshAsset(Mesh mesh, params string[] nameSuffixes)
+        static Mesh SaveMeshAsset(Mesh mesh, string newName)
         {
             string assetPath = AssetDatabase.GetAssetPath(mesh);
 
@@ -134,15 +145,8 @@ namespace Poi
 
             PoiHelpers.EnsurePathExistsInAssets(bakesDir);
 
-            //Figure out mesh name
-
-            string[] toRemove = nameSuffixes.Union(new [] {"baked", bakedSuffix_normals, bakedSuffix_position}).ToArray();
-
-            string nameNoExt = Path.GetFileNameWithoutExtension(assetPath);
-            string fileName = PoiHelpers.RemoveSuffix(nameNoExt, toRemove);
-            fileName = PoiHelpers.AddSuffix(fileName, nameSuffixes);
-
-            string pathNoExt = Path.Combine(bakesDir, fileName);
+            //Generate path
+            string pathNoExt = Path.Combine(bakesDir, newName);
             string newPath = AssetDatabase.GenerateUniqueAssetPath($"{pathNoExt}.mesh");
 
             //Save mesh, load it back, assign to renderer
@@ -246,7 +250,8 @@ namespace Poi
                     meshInfo.sharedMesh.colors = colors;
 
                     //Create new mesh asset and add it to queue
-                    Mesh newMesh = SaveMeshAsset(meshInfo.sharedMesh, meshInfo.ownerRenderer.gameObject.name,  bakedSuffix_position);
+                    string name = PoiHelpers.AddSuffix(meshInfo.ownerRenderer.gameObject.name, bakedSuffix_position);
+                    Mesh newMesh = SaveMeshAsset(meshInfo.sharedMesh, name);
                     if(newMesh)
                         queue.Add(meshInfo, newMesh);
                 }
@@ -278,8 +283,10 @@ namespace Poi
                     if(!meshInfo.sharedMesh)
                         continue;
 
+                    Mesh meshOverride = IgnoreCustomNormals ? Instantiate(meshInfo.sharedMesh) : null;
+
                     Vector3[] verts = meshInfo.bakedVertices;
-                    Vector3[] normals = meshInfo.bakedNormals;
+                    Vector3[] normals = meshOverride ? meshOverride.normals : meshInfo.bakedNormals;
                     VertexInfo[] vertInfo = new VertexInfo[verts.Length];
                     for(int i = 0; i < verts.Length; i++)
                     {
@@ -324,7 +331,8 @@ namespace Poi
                     }
                     meshInfo.sharedMesh.colors = colors;
 
-                    Mesh newMesh = SaveMeshAsset(meshInfo.sharedMesh, meshInfo.ownerRenderer.gameObject.name, bakedSuffix_normals);
+                    string name = PoiHelpers.AddSuffix(meshInfo.ownerRenderer.gameObject.name, bakedSuffix_normals);
+                    Mesh newMesh = SaveMeshAsset(meshInfo.sharedMesh, name);
                     if(newMesh)
                         queue.Add(meshInfo, newMesh);
                 }
