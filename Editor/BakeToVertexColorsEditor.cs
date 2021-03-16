@@ -14,7 +14,7 @@ namespace Poi
         static readonly Vector2 MIN_WINDOW_SIZE = new Vector2(316, 210);
 
         // Version
-        Version version = new Version(1, 3);
+        Version version = new Version(1, 2, 1);
 
         string SubTitle
         {
@@ -284,6 +284,7 @@ namespace Poi
                         continue;
 
                     Mesh meshOverride = IgnoreCustomNormals ? Instantiate(meshInfo.sharedMesh) : null;
+                    meshOverride.RecalculateNormals();
 
                     Vector3[] verts = meshInfo.bakedVertices;
                     Vector3[] normals = meshOverride ? meshOverride.normals : meshInfo.bakedNormals;
