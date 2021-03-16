@@ -75,31 +75,6 @@ namespace Poi
         }
 
         /// <summary>
-        /// Removes suffix from the end of string then returns it
-        /// </summary>
-        /// <param name="str"></param>
-        /// <param name="suffixes">Each to be removed in order</param>
-        /// <returns></returns>
-        public static string RemoveSuffix(string str, string[] suffixes)
-        {
-            var suffixList = suffixes.ToList();
-            suffixList.Remove(str);
-
-            while(suffixList.Any(str.EndsWith))
-                foreach(string sfx in suffixList)
-                {
-                    string s = suffixSeparator + sfx;
-                    if(!str.EndsWith(sfx))
-                        continue;
-
-                    int idx = str.LastIndexOf(s, StringComparison.Ordinal);
-                    if(idx != -1)
-                        str = str.Remove(idx, s.Length);
-                }
-            return str;
-        }
-
-        /// <summary>
         /// Draws a GUI ilne
         /// </summary>
         /// <param name="spaceBefore"></param>
@@ -272,6 +247,26 @@ namespace Poi
             if(labels == null)
                 return PoiExtensions.PoiTextureChannel.RGBA;
             return (PoiExtensions.PoiTextureChannel)GUILayout.SelectionGrid((int)currentSelection, labels, labels.Length);
+        }
+
+        internal static void DrawInsideHorizontalBox(Action action)
+        {
+            if(action == null)
+                return;
+
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            action.Invoke();
+            EditorGUILayout.EndHorizontal();
+        }
+
+        internal static void DrawInsideVerticalBox(Action action)
+        {
+            if(action == null)
+                return;
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            action.Invoke();
+            EditorGUILayout.EndVertical();
         }
     }
 

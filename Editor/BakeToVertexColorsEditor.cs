@@ -14,7 +14,8 @@ namespace Poi
         static readonly Vector2 MIN_WINDOW_SIZE = new Vector2(316, 210);
 
         // Version
-        Version version = new Version(1, 2);
+        Version version = new Version(1, 3);
+
         string SubTitle
         {
             get
@@ -28,6 +29,9 @@ namespace Poi
 
         //Strings
         const string log_prefix = "<color=blue>Poi:</color> "; //color is hex or name
+
+        const string ui_title = "Poi Vertex Color Baker";
+        const string ui_selected = "Avatar";
 
         const string bakedSuffix_normals = "baked_normals";
         const string bakedSuffix_position = "baked_position";
@@ -50,6 +54,7 @@ namespace Poi
             get => _selection;
             set => _selection = value;
         }
+        static bool IgnoreCustomNormals { get; set; }
 
         [MenuItem("Poi/Tools/Vertex Color Baker", priority = 11)]
         public static void ShowWindow()
@@ -65,13 +70,13 @@ namespace Poi
 
         void OnGUI()
         {
-            EditorGUILayout.LabelField("Poi Vertex Color Baker", PoiStyles.TitleLabel);
+            EditorGUILayout.LabelField(ui_title, PoiStyles.TitleLabel);
             EditorGUILayout.LabelField(SubTitle);
 
             PoiHelpers.DrawLine();
 
             EditorGUI.BeginChangeCheck();
-            GameObject obj = EditorGUILayout.ObjectField("Avatar", Selection, typeof(GameObject), true) as GameObject;
+            GameObject obj = EditorGUILayout.ObjectField(ui_selected, Selection, typeof(GameObject), true) as GameObject;
             if(EditorGUI.EndChangeCheck())
                 Selection = obj;
 
@@ -80,6 +85,12 @@ namespace Poi
             EditorGUI.BeginDisabledGroup(!Selection);
             {
                 EditorGUILayout.HelpBox(hint_bakeAverageNormals, MessageType.Info);
+
+                PoiHelpers.DrawInsideVerticalBox(() =>
+                {
+                    IgnoreCustomNormals = EditorGUILayout.ToggleLeft("Ignore custom normals", IgnoreCustomNormals);
+                });
+
                 if(GUILayout.Button(button_bakeAverageNormals))
                 {
                     var meshes = GetAllMeshInfos(Selection);
@@ -272,8 +283,10 @@ namespace Poi
                     if(!meshInfo.sharedMesh)
                         continue;
 
+                    Mesh meshOverride = IgnoreCustomNormals ? Instantiate(meshInfo.sharedMesh) : null;
+
                     Vector3[] verts = meshInfo.bakedVertices;
-                    Vector3[] normals = meshInfo.bakedNormals;
+                    Vector3[] normals = meshOverride ? meshOverride.normals : meshInfo.bakedNormals;
                     VertexInfo[] vertInfo = new VertexInfo[verts.Length];
                     for(int i = 0; i < verts.Length; i++)
                     {
