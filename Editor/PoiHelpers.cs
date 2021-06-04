@@ -179,7 +179,7 @@ namespace Poi
                         size = new Vector2Int(presets[selectedPresetIndex], presets[selectedPresetIndex]);
                 }
 
-                linked = GUILayout.Toggle(linked, "L", EditorStyles.miniButton, GUILayout.MaxWidth(16));
+                linked = GUILayout.Toggle(linked, PoiIcons.LinkIcon, EditorStyles.miniButton, GUILayout.MaxWidth(22), GUILayout.MaxHeight(16));
             }
             EditorGUILayout.EndHorizontal();
 
@@ -278,20 +278,9 @@ namespace Poi
     internal static class PoiExtensions
     {
         public enum PoiTextureChannel { RGBA, Red, Green, Blue, Alpha }
-        public static Shader PackerShader
-        {
-            get
-            {
-                return Shader.Find("Hidden/Poi/TexturePacker");
-            }
-        }
-        public static Shader UnpackerShader
-        {
-            get
-            {
-                return Shader.Find("Hidden/Poi/TextureUnpacker");
-            }
-        }
+        public static Shader PackerShader => Shader.Find("Hidden/Poi/TexturePacker");
+
+        public static Shader UnpackerShader => Shader.Find("Hidden/Poi/TextureUnpacker");
 
         internal static Texture2D GetChannelAsTexture(this Texture2D tex, PoiTextureChannel chan, bool invert = false, Vector2Int sizeOverride = default)
         {

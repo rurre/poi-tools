@@ -173,7 +173,7 @@ namespace Poi
             EditorGUILayout.EndScrollView();
 
             DrawShowChannelPicker(ref showChannelPicker);
-
+            
             bool disabled = new bool[] { packRed, packGreen, packBlue, packAlpha }.Count(b => b) < 2;
             EditorGUI.BeginDisabledGroup(disabled);
             {
@@ -209,10 +209,10 @@ namespace Poi
                     if(tempSize != default)
                         UnpackSize = tempSize.ClosestPowerOfTwo(AUTO_SELECT_CEILING);
                 }
-
-                DrawShowChannelPicker(ref showChannelPicker);
             }
             EditorGUILayout.EndScrollView();
+            
+            DrawShowChannelPicker(ref showChannelPicker);
 
             EditorGUI.BeginDisabledGroup(!unpackSource);
             {
