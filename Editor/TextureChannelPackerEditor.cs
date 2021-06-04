@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -123,7 +122,7 @@ namespace Poi
         }
 
 
-        [MenuItem("Poi/Tools/Texture Packer", priority = 0)]
+        [MenuItem("Tools/Poi/Texture Packer", priority = 0)]
         public static void ShowWindow()
         {
             //Show existing window instance. If one doesn't exist, make one.
