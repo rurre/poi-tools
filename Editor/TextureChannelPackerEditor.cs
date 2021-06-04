@@ -37,7 +37,7 @@ namespace Poi
         string unpackedName = "unpacked";
 
         // Version
-        Version version = new Version(1, 2);
+        Version version = new Version(1, 3);
         string SubTitle
         {
             get
@@ -82,9 +82,7 @@ namespace Poi
         bool showChannelPicker = false;
 
         TextureChannel redTexChan, blueTexChan, greenTexChan, alphaTexChan, unpackChan;
-
         Texture2D packRed, packGreen, packBlue, packAlpha, unpackSource;
-
         bool redInvert, greenInvert, blueInvert, alphaInvert, unpackInvert;
 
         string[] ChannelLabels { get; } = { "All", "Red", "Green", "Blue", "Alpha" };
@@ -244,10 +242,10 @@ namespace Poi
 
             if(showChannelPicker)
             {
-                red = packRed.GetChannelAsTexture(redTexChan, unpackInvert);
-                green = packGreen.GetChannelAsTexture(greenTexChan, unpackInvert);
-                blue = packBlue.GetChannelAsTexture(blueTexChan, unpackInvert);
-                alpha = packAlpha.GetChannelAsTexture(alphaTexChan, unpackInvert);
+                red = packRed.GetChannelAsTexture(redTexChan, false);
+                green = packGreen.GetChannelAsTexture(greenTexChan, false);
+                blue = packBlue.GetChannelAsTexture(blueTexChan, false);
+                alpha = packAlpha.GetChannelAsTexture(alphaTexChan, false);
             }
 
             Texture2D packResult = PoiHelpers.PackTextures(PackSize, red, green, blue, alpha, redInvert, greenInvert, blueInvert, alphaInvert);
