@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
-using TextureChannel = Poi.PoiExtensions.PoiTextureChannel;
 
 namespace Poi
 {
@@ -12,6 +11,8 @@ namespace Poi
         const string LOG_PREFIX = "<color=blue>Poi:</color> "; //color is hex or name
         static readonly Vector2 MIN_WINDOW_SIZE = new Vector2(350, 500);
         const int AUTO_SELECT_CEILING = 2048;
+
+        const short texturesRequiredToPack = 1; // How many textures required to allow packing
 
         const string INVERT_LABEL = "Invert";
         const string PACKED_TEXTURE_LABEL = "Texture";
@@ -80,7 +81,7 @@ namespace Poi
 
         bool showChannelPicker = false;
 
-        TextureChannel redTexChan, blueTexChan, greenTexChan, alphaTexChan, unpackChan;
+        PoiExtensions.PoiTextureChannel redTexChan, blueTexChan, greenTexChan, alphaTexChan, unpackChan;
         Texture2D packRed, packGreen, packBlue, packAlpha, unpackSource;
         bool redInvert, greenInvert, blueInvert, alphaInvert, unpackInvert;
 
@@ -173,7 +174,7 @@ namespace Poi
 
             DrawShowChannelPicker(ref showChannelPicker);
             
-            bool disabled = new bool[] { packRed, packGreen, packBlue, packAlpha }.Count(b => b) < 2;
+            bool disabled = new bool[] { packRed, packGreen, packBlue, packAlpha }.Count(b => b) < texturesRequiredToPack;
             EditorGUI.BeginDisabledGroup(disabled);
             {
                 PackSize = DrawTextureSizeSettings(PackSize, ref packedName, ref packSizeIsLinked, ref packSizeAutoSelect);
@@ -258,13 +259,13 @@ namespace Poi
 
         }
 
-        void DoUnpack(TextureChannel singleChannel = TextureChannel.RGBA)
+        void DoUnpack(PoiExtensions.PoiTextureChannel singleChannel = PoiExtensions.PoiTextureChannel.RGBA)
         {
             if(!PackerShadersExist)
                 return;
 
             var channelTextures = new Dictionary<string, Texture2D>();
-            if(singleChannel == TextureChannel.RGBA)
+            if(singleChannel == PoiExtensions.PoiTextureChannel.RGBA)
                 channelTextures = PoiHelpers.UnpackTextureToChannels(unpackSource, unpackInvert, UnpackSize);
             else
                 channelTextures[singleChannel.ToString().ToLower()] = unpackSource.GetChannelAsTexture(singleChannel, unpackInvert, UnpackSize);
@@ -311,7 +312,7 @@ namespace Poi
             EditorGUILayout.EndHorizontal();
         }
 
-        void DrawTextureSelector(string label, ref Texture2D tex, ref TextureChannel selectedChannel, ref bool invert)
+        void DrawTextureSelector(string label, ref Texture2D tex, ref PoiExtensions.PoiTextureChannel selectedChannel, ref bool invert)
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             {
